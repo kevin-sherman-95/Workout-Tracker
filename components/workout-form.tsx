@@ -789,7 +789,7 @@ export function WorkoutForm({ workoutId, initialDate }: WorkoutFormProps) {
         <CardContent className="space-y-6">
           {selectedExercises.length === 0 && (
             <p className="text-center text-muted-foreground py-8">
-              Click "Add Exercise" to start logging your workout
+              Click &quot;Add Exercise&quot; to start logging your workout
             </p>
           )}
 
