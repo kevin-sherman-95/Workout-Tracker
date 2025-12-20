@@ -33,26 +33,36 @@ export function ProgressChart({
   dataKey = "volume",
   title,
 }: ProgressChartProps) {
-  const ChartComponent = type === "line" ? LineChart : BarChart;
-  const DataComponent = type === "line" ? Line : Bar;
-
   return (
     <div className="w-full h-[400px]">
       {title && <h3 className="text-lg font-semibold mb-4">{title}</h3>}
       <ResponsiveContainer width="100%" height="100%">
-        <ChartComponent data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="date" />
-          <YAxis />
-          <Tooltip />
-          <Legend />
-          <DataComponent
-            type={type === "line" ? "monotone" : undefined}
-            dataKey={dataKey}
-            stroke={type === "line" ? "#8884d8" : undefined}
-            fill={type === "bar" ? "#8884d8" : undefined}
-          />
-        </ChartComponent>
+        {type === "line" ? (
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke="#8884d8"
+            />
+          </LineChart>
+        ) : (
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Bar
+              dataKey={dataKey}
+              fill="#8884d8"
+            />
+          </BarChart>
+        )}
       </ResponsiveContainer>
     </div>
   );
