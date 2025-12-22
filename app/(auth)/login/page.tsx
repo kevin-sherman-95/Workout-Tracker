@@ -17,11 +17,16 @@ export default function LoginPage() {
     }
   }, [user, router]);
 
-  // Check if Auth0 returned an error (likely not configured)
+  // Check if Auth0 returned a configuration error (not just "Unauthorized" which is expected)
   useEffect(() => {
     if (error) {
       console.warn('Auth0 error:', error);
-      setIsAuth0Configured(false);
+      // "Unauthorized" is expected when user is not logged in - Auth0 IS configured
+      // Only set not configured for actual configuration errors
+      const errorMessage = error.message?.toLowerCase() || '';
+      if (!errorMessage.includes('unauthorized')) {
+        setIsAuth0Configured(false);
+      }
     }
   }, [error]);
 
