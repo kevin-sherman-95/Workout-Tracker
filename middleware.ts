@@ -1,89 +1,55 @@
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server';
+import { auth0, isAuth0Configured } from '@/lib/auth0';
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
-
-  // BYPASS AUTH FOR TESTING - Remove this when Supabase is configured
-  const BYPASS_AUTH = process.env.BYPASS_AUTH === 'true' || 
-    !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-    process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')
-
-  if (BYPASS_AUTH) {
-    // Allow all routes when auth is bypassed
-    return supabaseResponse
+  // If Auth0 is not configured, allow all routes (development mode)
+  if (!isAuth0Configured() || !auth0) {
+    console.warn('Auth0 not configured - running in development mode without authentication');
+    return NextResponse.next();
   }
 
-  // Check if Supabase env vars are set
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  // Auth0 handles the authentication middleware
+  const authResponse = await auth0.middleware(request);
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    // If env vars are missing, allow access to auth pages only
-    if (
-      !request.nextUrl.pathname.startsWith('/login') &&
-      !request.nextUrl.pathname.startsWith('/signup')
-    ) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      return NextResponse.redirect(url)
+  // If Auth0 middleware returns a response (redirect, etc.), use it
+  if (authResponse.status !== 200 || authResponse.headers.get('location')) {
+    return authResponse;
+  }
+
+  // For protected routes, check if user is authenticated
+  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+    const session = await auth0.getSession();
+    
+    if (!session) {
+      // Redirect to login if not authenticated
+      return NextResponse.redirect(new URL('/login', request.url));
     }
-    return supabaseResponse
   }
 
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          )
-        },
-      },
+  // If user is authenticated and trying to access login/signup, redirect to dashboard
+  if (
+    request.nextUrl.pathname.startsWith('/login') ||
+    request.nextUrl.pathname.startsWith('/signup')
+  ) {
+    const session = await auth0.getSession();
+    
+    if (session) {
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
-  )
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (
-    !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/signup')
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
   }
 
-  if (
-    user &&
-    (request.nextUrl.pathname.startsWith('/login') ||
-      request.nextUrl.pathname.startsWith('/signup'))
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
-  }
-
-  return supabaseResponse
+  return authResponse;
 }
 
 export const config = {
   matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (svg, png, jpg, etc.)
+     */
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
-}
-
+};

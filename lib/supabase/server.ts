@@ -1,67 +1,80 @@
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { auth0 } from '@/lib/auth0';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
-export async function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  // BYPASS AUTH FOR TESTING - Return a mock client if credentials are missing
-  if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes('placeholder')) {
-    // Return a mock client that won't throw errors
-    const createMockQueryBuilder = () => {
-      const emptyResult = { data: null, error: null, count: 0 };
-      
-      const builder: any = new Promise((resolve) => {
-        // Resolve immediately with empty data
-        setTimeout(() => resolve(emptyResult), 0);
-      });
-      
-      // Add chainable methods that return the same promise
-      builder.select = (cols?: string | { count?: string; head?: boolean }) => {
-        if (cols && typeof cols === 'object' && cols.count) {
-          return Promise.resolve(emptyResult);
-        }
-        return builder;
-      };
-      builder.order = () => builder;
-      builder.limit = () => builder;
-      builder.eq = () => builder;
-      builder.in = () => builder;
-      
-      return builder;
-    };
-    
-    return {
-      auth: {
-        getUser: async () => ({ data: { user: null }, error: null }),
-      },
-      from: () => createMockQueryBuilder(),
-    } as any
+/**
+ * Creates a Supabase client with the current Auth0 user context.
+ * Uses service role key for database operations since we're handling
+ * authentication through Auth0 instead of Supabase Auth.
+ * 
+ * @returns Object containing supabase client and userId from Auth0
+ */
+export async function getSupabaseWithUser() {
+  let userId: string | null = null;
+  
+  // Get session from Auth0 if configured
+  if (auth0) {
+    try {
+      const session = await auth0.getSession();
+      userId = session?.user?.sub || null;
+    } catch (err) {
+      console.error('Failed to get Auth0 session:', err);
+    }
   }
 
-  const cookieStore = await cookies()
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  return createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            )
-          } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
-        },
-      },
-    }
-  )
+  // Return mock client if Supabase is not configured
+  if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('placeholder')) {
+    return {
+      supabase: createMockSupabaseClient(),
+      userId: userId || 'mock-user',
+    };
+  }
+
+  const supabase = createSupabaseClient(supabaseUrl, supabaseServiceKey);
+
+  return { supabase, userId };
 }
 
+/**
+ * Legacy function for backward compatibility.
+ * Creates a Supabase client (server-side).
+ * 
+ * @deprecated Use getSupabaseWithUser() instead for Auth0 integration
+ */
+export async function createClient() {
+  const { supabase } = await getSupabaseWithUser();
+  return supabase;
+}
+
+/**
+ * Creates a mock Supabase client for development/testing
+ * when Supabase credentials are not configured.
+ */
+function createMockSupabaseClient() {
+  const createMockQueryBuilder = () => {
+    const emptyResult = { data: null, error: null, count: 0 };
+
+    const builder: any = new Promise((resolve) => {
+      setTimeout(() => resolve(emptyResult), 0);
+    });
+
+    builder.select = () => builder;
+    builder.insert = () => builder;
+    builder.update = () => builder;
+    builder.delete = () => builder;
+    builder.upsert = () => builder;
+    builder.order = () => builder;
+    builder.limit = () => builder;
+    builder.eq = () => builder;
+    builder.in = () => builder;
+    builder.single = () => Promise.resolve(emptyResult);
+
+    return builder;
+  };
+
+  return {
+    from: () => createMockQueryBuilder(),
+  } as any;
+}

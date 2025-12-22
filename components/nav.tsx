@@ -1,21 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, Plus, History, TrendingUp, LogOut } from "lucide-react";
 
 export function Nav() {
   const pathname = usePathname();
-  const router = useRouter();
-
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -53,13 +44,14 @@ export function Nav() {
               })}
             </div>
           </div>
-          <Button variant="ghost" onClick={handleLogout} className="flex items-center space-x-2">
-            <LogOut className="h-4 w-4" />
-            <span>Logout</span>
-          </Button>
+          <a href="/auth/logout">
+            <Button variant="ghost" className="flex items-center space-x-2">
+              <LogOut className="h-4 w-4" />
+              <span>Logout</span>
+            </Button>
+          </a>
         </div>
       </div>
     </nav>
   );
 }
-
