@@ -1,14 +1,12 @@
-import { auth0 } from "@/lib/auth0";
+import { getSession } from "@auth0/nextjs-auth0";
 import { SettingsClient } from "./settings-client";
 
 export default async function SettingsPage() {
   let user = null;
   
   try {
-    if (auth0) {
-      const session = await auth0.getSession();
-      user = session?.user || null;
-    }
+    const session = await getSession();
+    user = session?.user || null;
   } catch (error) {
     console.error("Failed to get user session:", error);
   }

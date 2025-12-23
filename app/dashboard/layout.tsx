@@ -1,6 +1,6 @@
 import { Nav } from "@/components/nav";
 import { createClient } from "@/lib/supabase/server";
-import { auth0 } from "@/lib/auth0";
+import { getSession } from "@auth0/nextjs-auth0";
 import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
@@ -18,11 +18,10 @@ export default async function DashboardLayout({
 
   // Try to get user from Auth0
   try {
-    if (auth0) {
-      const session = await auth0.getSession();
-      if (session?.user) {
-        userName = session.user.name || session.user.nickname || null;
-        userPicture = session.user.picture || null;
+    const session = await getSession();
+    if (session?.user) {
+      userName = session.user.name || session.user.nickname || null;
+      userPicture = session.user.picture || null;
       }
     }
   } catch (error) {

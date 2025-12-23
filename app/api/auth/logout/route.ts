@@ -1,3 +1,3 @@
-import { handleLogout } from '@auth0/nextjs-auth0';
+import { handleLogout } from '@auth0/nextjs-auth0/server';
 
-export const GET = handleLogout;
+export const GET = handleLogout();

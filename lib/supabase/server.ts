@@ -1,4 +1,4 @@
-import { auth0 } from '@/lib/auth0';
+import { getSession } from '@auth0/nextjs-auth0';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
 /**
@@ -12,13 +12,11 @@ export async function getSupabaseWithUser() {
   let userId: string | null = null;
   
   // Get session from Auth0 if configured
-  if (auth0) {
-    try {
-      const session = await auth0.getSession();
-      userId = session?.user?.sub || null;
-    } catch (err) {
-      console.error('Failed to get Auth0 session:', err);
-    }
+  try {
+    const session = await getSession();
+    userId = session?.user?.sub || null;
+  } catch (err) {
+    console.error('Failed to get Auth0 session:', err);
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

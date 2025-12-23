@@ -1,5 +1,5 @@
 import { WorkoutForm } from "@/components/workout-form";
-import { auth0 } from "@/lib/auth0";
+import { getSession } from "@auth0/nextjs-auth0";
 
 export default async function EditWorkoutPage({
   params,
@@ -11,10 +11,8 @@ export default async function EditWorkoutPage({
   // Get Auth0 user ID for the workout form
   let userId: string | undefined;
   try {
-    if (auth0) {
-      const session = await auth0.getSession();
-      userId = session?.user?.sub;
-    }
+    const session = await getSession();
+    userId = session?.user?.sub;
   } catch (error) {
     console.warn("Failed to get Auth0 session:", error);
   }
