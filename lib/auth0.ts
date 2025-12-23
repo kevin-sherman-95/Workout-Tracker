@@ -28,6 +28,7 @@ export function isAuth0Configured(): boolean {
  * Create Auth0 client instance with custom configuration
  * Configured to always show Google account picker with prompt=select_account
  * This forces Google to display the account selection screen on every login
+ * Deployed to Vercel with proper callback URLs
  */
 export const auth0 = new Auth0Client({
   authorizationParameters: {
