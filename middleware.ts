@@ -1,16 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { auth0, isAuth0Configured } from '@/lib/auth0';
 
 export async function middleware(request: NextRequest) {
-  // If Auth0 is not configured, allow all routes (development mode)
-  if (!isAuth0Configured()) {
-    console.warn('Auth0 not configured - running in development mode without authentication');
-    return NextResponse.next();
-  }
-
-  // Let Auth0 middleware handle authentication
-  return await auth0.middleware(request);
+  // Allow all routes - Auth0 handles authentication via API routes
+  return NextResponse.next();
 }
 
 export const config = {

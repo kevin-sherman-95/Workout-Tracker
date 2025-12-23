@@ -1,4 +1,3 @@
-import { Auth0Client } from '@auth0/nextjs-auth0/server';
 import { createClient } from '@supabase/supabase-js';
 
 /**
@@ -9,7 +8,7 @@ export function isAuth0Configured(): boolean {
   const clientId = process.env.AUTH0_CLIENT_ID;
   const clientSecret = process.env.AUTH0_CLIENT_SECRET;
   const secret = process.env.AUTH0_SECRET;
-  const baseUrl = process.env.APP_BASE_URL;
+  const baseUrl = process.env.AUTH0_BASE_URL;
 
   return !!(
     domain &&
@@ -23,19 +22,6 @@ export function isAuth0Configured(): boolean {
     !secret.includes('REPLACE_')
   );
 }
-
-/**
- * Create Auth0 client instance with custom configuration
- * Configured to always show Google account picker with prompt=select_account
- * This forces Google to display the account selection screen on every login
- * Deployed to Vercel with proper callback URLs
- */
-export const auth0 = new Auth0Client({
-  authorizationParameters: {
-    prompt: 'select_account',
-    max_age: 0, // Force re-authentication
-  },
-});
 
 /**
  * Helper to sync user to Supabase after Auth0 login
