@@ -1,21 +1,14 @@
 import { WorkoutForm } from "@/components/workout-form";
-import { getSession } from "@auth0/nextjs-auth0";
 
-export default async function LogWorkoutPage({
+export default function LogWorkoutPage({
   searchParams,
 }: {
   searchParams: { date?: string };
 }) {
   const initialDate = searchParams?.date;
   
-  // Get Auth0 user ID for the workout form
-  let userId: string | undefined;
-  try {
-    const session = await getSession();
-    userId = session?.user?.sub;
-  } catch (error) {
-    console.warn("Failed to get Auth0 session:", error);
-  }
+  // User ID is fetched client-side in WorkoutForm via useUser hook
+  const userId = undefined;
   
   return (
     <div className="space-y-6">
