@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createClient, isInMockMode } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +31,7 @@ interface WorkoutFormProps {
 
 export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: WorkoutFormProps) {
   const router = useRouter();
-  const [focus, setFocus] = useState<WorkoutFocus>("Chest/Triceps/Shoulders");
+  const [focus, setFocus] = useState<WorkoutFocus>("Chest / Shoulders / Triceps");
   const [workoutDate, setWorkoutDate] = useState(
     initialDate || new Date().toISOString().split("T")[0]
   );
@@ -39,6 +39,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exerciseUsage, setExerciseUsage] = useState<Map<string, number>>(new Map());
   const [selectedExercises, setSelectedExercises] = useState<ExerciseSet[]>([]);
+  const selectedExercisesRef = useRef<ExerciseSet[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingWorkout, setIsLoadingWorkout] = useState(!!workoutId);
@@ -47,8 +48,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [currentWorkoutId, setCurrentWorkoutId] = useState<string | undefined>(workoutId);
   const [collapsedExercises, setCollapsedExercises] = useState<Set<number>>(new Set());
 
+  // Keep ref in sync with state for use in handleSubmit
+  useEffect(() => {
+    selectedExercisesRef.current = selectedExercises;
+  }, [selectedExercises]);
+
   const focusOptions: WorkoutFocus[] = [
-    "Chest/Triceps/Shoulders",
+    "Chest / Shoulders / Triceps",
     "Back/Biceps",
     "Legs",
     "Full Body",
@@ -67,7 +73,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   // Get muscle groups for the selected focus
   const getMuscleGroupsForFocus = (focus: WorkoutFocus): string[] => {
     const mapping: Record<WorkoutFocus, string[]> = {
-      "Chest/Triceps/Shoulders": ["Chest", "Triceps", "Shoulders"],
+      "Chest / Shoulders / Triceps": ["Chest", "Triceps", "Shoulders"],
       "Back/Biceps": ["Back", "Biceps"],
       "Legs": ["Legs"],
       "Full Body": ["Chest", "Triceps", "Shoulders", "Back", "Biceps", "Legs", "Core"],
@@ -80,7 +86,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   // Mock exercises for testing when Supabase is not configured
   const getMockExercises = (focus: WorkoutFocus): Exercise[] => {
     const mapping: Record<WorkoutFocus, string[]> = {
-      "Chest/Triceps/Shoulders": [
+      "Chest / Shoulders / Triceps": [
         "Barbell Bench Press",
         "Dumbbell Bench Press",
         "Barbell Incline Bench Press",
@@ -193,8 +199,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   useEffect(() => {
     const loadExercises = async () => {
       const client = createClient();
-      const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+      const isMockMode = isInMockMode();
       
       // Get user ID for usage tracking - use prop from Auth0 or fall back to mock
       const userId = propUserId || 'mock-user-id';
@@ -272,26 +277,24 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       setIsLoadingWorkout(true);
       try {
         const client = createClient();
-        const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                          process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
 
-        // Load workout
+        // Try to load workout from Supabase first
         let workout: any = null;
-        if (isMockMode) {
-          // Load from localStorage
-          const mockWorkouts = typeof window !== 'undefined'
-            ? JSON.parse(localStorage.getItem('mock-workouts') || '[]')
-            : [];
-          workout = mockWorkouts.find((w: any) => w.id === workoutId);
-        } else {
-          const { data, error } = await client
+        try {
+          const { data } = await client
             .from("workouts")
             .select("*")
             .eq("id", workoutId)
             .single();
-          
-          if (error) throw error;
           workout = data;
+        } catch {
+          // Supabase failed, ignore and try localStorage
+        }
+
+        // Fall back to localStorage if Supabase didn't return data
+        if (!workout && typeof window !== 'undefined') {
+          const mockWorkouts = JSON.parse(localStorage.getItem('mock-workouts') || '[]');
+          workout = mockWorkouts.find((w: any) => w.id === workoutId);
         }
 
         if (!workout) {
@@ -304,21 +307,22 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         setNotes(workout.notes || "");
         setCurrentWorkoutId(workout.id);
 
-        // Load workout exercises
+        // Try to load workout exercises from Supabase first
         let workoutExercises: any[] = [];
-        if (isMockMode) {
-          const mockWorkoutExercises = typeof window !== 'undefined'
-            ? JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]')
-            : [];
-          workoutExercises = mockWorkoutExercises.filter((we: any) => we.workout_id === workoutId);
-        } else {
-          const { data, error } = await client
+        try {
+          const { data } = await client
             .from("workout_exercises")
             .select("*")
             .eq("workout_id", workoutId);
-          
-          if (error) throw error;
           workoutExercises = data || [];
+        } catch {
+          // Supabase failed, ignore and try localStorage
+        }
+
+        // Fall back to localStorage if Supabase didn't return data
+        if (workoutExercises.length === 0 && typeof window !== 'undefined') {
+          const mockWorkoutExercises = JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]');
+          workoutExercises = mockWorkoutExercises.filter((we: any) => we.workout_id === workoutId);
         }
 
         // Group exercises by exercise_id and convert to ExerciseSet format
@@ -327,7 +331,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             acc[we.exercise_id] = {
               exerciseId: we.exercise_id,
               sets: [],
-              restInterval: we.rest_interval || "60", // Default to 60 seconds
+              restInterval: we.rest_interval?.toString() || "60", // Default to 60 seconds
             };
           }
           acc[we.exercise_id].sets.push({
@@ -377,13 +381,19 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const removeExercise = (index: number) => {
-    setSelectedExercises(selectedExercises.filter((_, i) => i !== index));
+    setSelectedExercises(prev => prev.filter((_, i) => i !== index));
   };
 
   const addSet = (exerciseIndex: number) => {
-    const updated = [...selectedExercises];
-    updated[exerciseIndex].sets.push({ reps: 0, weight: 0 });
-    setSelectedExercises(updated);
+    setSelectedExercises(prev =>
+      prev.map((exercise, idx) => {
+        if (idx !== exerciseIndex) return exercise;
+        return {
+          ...exercise,
+          sets: [...exercise.sets, { reps: 0, weight: 0 }],
+        };
+      })
+    );
     // Remove from saved exercises when sets change
     setSavedExercises(prev => {
       const newSet = new Set(prev);
@@ -393,11 +403,15 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const removeSet = (exerciseIndex: number, setIndex: number) => {
-    const updated = [...selectedExercises];
-    updated[exerciseIndex].sets = updated[exerciseIndex].sets.filter(
-      (_, i) => i !== setIndex
+    setSelectedExercises(prev =>
+      prev.map((exercise, idx) => {
+        if (idx !== exerciseIndex) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.filter((_, i) => i !== setIndex),
+        };
+      })
     );
-    setSelectedExercises(updated);
     // Remove from saved exercises when sets change
     setSavedExercises(prev => {
       const newSet = new Set(prev);
@@ -412,9 +426,18 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     field: "reps" | "weight",
     value: number
   ) => {
-    const updated = [...selectedExercises];
-    updated[exerciseIndex].sets[setIndex][field] = value;
-    setSelectedExercises(updated);
+    setSelectedExercises(prev =>
+      prev.map((exercise, eIdx) => {
+        if (eIdx !== exerciseIndex) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set, sIdx) => {
+            if (sIdx !== setIndex) return set;
+            return { ...set, [field]: value };
+          }),
+        };
+      })
+    );
     // Remove from saved exercises when set data changes
     setSavedExercises(prev => {
       const newSet = new Set(prev);
@@ -424,9 +447,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const updateExercise = (exerciseIndex: number, exerciseId: string) => {
-    const updated = [...selectedExercises];
-    updated[exerciseIndex].exerciseId = exerciseId;
-    setSelectedExercises(updated);
+    setSelectedExercises(prev =>
+      prev.map((exercise, idx) => {
+        if (idx !== exerciseIndex) return exercise;
+        return { ...exercise, exerciseId };
+      })
+    );
     // Remove from saved exercises when exercise changes
     setSavedExercises(prev => {
       const newSet = new Set(prev);
@@ -436,9 +462,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const updateRestInterval = (exerciseIndex: number, interval: string) => {
-    const updated = [...selectedExercises];
-    updated[exerciseIndex].restInterval = interval;
-    setSelectedExercises(updated);
+    setSelectedExercises(prev =>
+      prev.map((exercise, idx) => {
+        if (idx !== exerciseIndex) return exercise;
+        return { ...exercise, restInterval: interval };
+      })
+    );
     // Remove from saved exercises when interval changes
     setSavedExercises(prev => {
       const newSet = new Set(prev);
@@ -461,8 +490,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     try {
       const client = createClient();
 
-      const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+      const isMockMode = isInMockMode();
       
       // Use the userId passed from the server component (Auth0), or fall back to mock user
       const userId = propUserId || (isMockMode ? 'mock-user-id' : null);
@@ -480,7 +508,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             ? JSON.parse(localStorage.getItem('mock-workouts') || '[]')
             : [];
           const newWorkout = {
-            id: `mock-workout-${Date.now()}`,
+            id: `mock-${Date.now()}`,
             user_id: userId,
             workout_date: workoutDate,
             focus,
@@ -665,16 +693,21 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    console.log('🚀 FORM SUBMIT STARTED');
     e.preventDefault();
     setError(null);
     setLoading(true);
+
+    // Use the ref to ensure we have the latest value
+    const exercisesToSave = selectedExercisesRef.current;
+    console.log('📦 Exercises to save:', exercisesToSave);
+    console.log('📦 Exercises count:', exercisesToSave.length);
 
     try {
       const client = createClient();
 
       // For testing: allow saving workouts even without real authentication
-      const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                        process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+      const isMockMode = isInMockMode();
       
       // Use the userId passed from the server component (Auth0), or fall back to mock user
       const userId = propUserId || (isMockMode ? 'mock-user-id' : null);
@@ -746,7 +779,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             ? JSON.parse(localStorage.getItem('mock-workouts') || '[]')
             : [];
           const newWorkout = {
-            id: `mock-workout-${Date.now()}`,
+            id: `mock-${Date.now()}`,
             user_id: userId,
             workout_date: workoutDate,
             focus,
@@ -786,9 +819,11 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       }
 
       // Create workout exercises
-      const workoutExercises = selectedExercises.flatMap((exercise, exerciseIndex) =>
+      console.log('💪 Creating workout exercises...');
+      const workoutExercises = exercisesToSave.flatMap((exercise, exerciseIndex) =>
         exercise.sets.map((set, setIndex) => {
           const exerciseName = exercises.find(e => e.id === exercise.exerciseId)?.name || 'Unknown Exercise';
+          console.log(`  Set ${setIndex + 1}: weight=${set.weight}, reps=${set.reps}`);
           return {
             workout_id: workoutIdToUse,
             exercise_id: exercise.exerciseId,
@@ -801,8 +836,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         })
       );
 
+      console.log('💾 Total workout exercises to save:', workoutExercises.length);
+      console.log('💾 Workout exercises data:', workoutExercises);
+
       if (workoutExercises.length > 0) {
+        console.log('🔍 isMockMode:', isMockMode);
+        console.log('🔍 workoutIdToUse:', workoutIdToUse);
         if (isMockMode) {
+          console.log('📝 Using localStorage (mock mode)');
           const mockWorkoutExercises = typeof window !== 'undefined'
             ? JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]')
             : [];
@@ -812,24 +853,32 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             created_at: new Date().toISOString(),
           }));
           mockWorkoutExercises.push(...newExercises);
+          console.log('✅ Saving to localStorage:', newExercises);
           if (typeof window !== 'undefined') {
             localStorage.setItem('mock-workout-exercises', JSON.stringify(mockWorkoutExercises));
+            console.log('✅ SAVED! localStorage now has', mockWorkoutExercises.length, 'total exercises');
           }
         } else {
+          console.log('📝 Using Supabase (real mode)');
           const { error: exercisesError } = await client
             .from("workout_exercises")
             .insert(workoutExercises);
 
           if (exercisesError) {
+            console.error('❌ Supabase save error:', exercisesError);
             throw exercisesError;
           }
+          console.log('✅ Saved to Supabase successfully');
         }
         
+        console.log('📊 Updating exercise usage counts...');
         // Update usage counts for all exercises in the workout
-        const uniqueExerciseIds = [...new Set(selectedExercises.map(e => e.exerciseId))];
+        const uniqueExerciseIds = [...new Set(exercisesToSave.map(e => e.exerciseId))];
         for (const exerciseId of uniqueExerciseIds) {
           await updateExerciseUsage(client, userId, exerciseId, isMockMode);
         }
+      } else {
+        console.warn('⚠️ No workout exercises to save (length is 0)');
       }
 
       // Dispatch event to update dashboard stats
@@ -837,10 +886,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         window.dispatchEvent(new Event('workoutUpdated'));
       }
 
+      console.log('🎉 WORKOUT SAVED SUCCESSFULLY!');
+      console.log('🔄 Redirecting to history page...');
+      
       // Success - redirect to history to see the saved workout
       router.push("/dashboard/history");
       router.refresh();
     } catch (err: any) {
+      console.error('❌ SAVE FAILED:', err);
       setError(err.message || "Failed to save workout");
       setLoading(false);
     }
@@ -1009,7 +1062,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                             type="number"
                             min="0"
                             step="0.5"
-                            value={set.weight || ""}
+                            value={set.weight.toString()}
                             onChange={(e) =>
                               updateSet(
                                 exerciseIndex,
@@ -1026,7 +1079,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                           <Input
                             type="number"
                             min="0"
-                            value={set.reps || ""}
+                            value={set.reps.toString()}
                             onChange={(e) =>
                               updateSet(
                                 exerciseIndex,

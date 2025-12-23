@@ -4,7 +4,7 @@ A Next.js workout tracking app built with Supabase for tracking gym workouts, ex
 
 ## Features
 
-- Log workouts by muscle group focus (Chest/Triceps/Shoulders, Back/Biceps, Legs, etc.)
+- Log workouts by muscle group focus (Chest / Shoulders / Triceps, Back/Biceps, Legs, etc.)
 - Track exercises with sets, reps, and weight
 - View workout history
 - Track progress week-over-week and month-over-month

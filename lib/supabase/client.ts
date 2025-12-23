@@ -21,11 +21,34 @@ export function createClient() {
   };
 
   // Return a mock client if credentials are missing or URL is invalid
-  if (!isValidUrl(supabaseUrl) || !supabaseKey || supabaseUrl!.includes('placeholder')) {
+  if (!isValidUrl(supabaseUrl) || !supabaseKey || 
+      supabaseUrl!.includes('placeholder') || 
+      supabaseUrl === 'your_supabase_url') {
     return createMockClient();
   }
 
   return createBrowserClient(supabaseUrl!, supabaseKey);
+}
+
+/**
+ * Helper to check if we're in mock mode
+ */
+export function isInMockMode(): boolean {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseKey || 
+      supabaseUrl.includes('placeholder') || 
+      supabaseUrl === 'your_supabase_url') {
+    return true;
+  }
+  
+  try {
+    const parsed = new URL(supabaseUrl);
+    return !(parsed.protocol === 'http:' || parsed.protocol === 'https:');
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -52,22 +75,20 @@ function createMockClient() {
 
   const createMockQueryBuilder = (tableName: string): any => {
     const emptyResult = { data: null, error: null, count: 0 };
-    // Support multiple filters
-    let filters: Array<{ column: string; value: any }> = [];
 
-    const createBuilder = (currentFilters: Array<{ column: string; value: any }> = []) => {
+    const createBuilder = (currentFilters: Array<{ column: string; value: any }> = [], isSelectMode: boolean = false) => {
       const builder: any = {
         select: () => {
-          const selectBuilder = createBuilder(currentFilters);
-          selectBuilder.single = () => {
-            let items = getMockData(tableName);
-            // Apply all filters
-            for (const filter of currentFilters) {
-              items = items.filter((i: any) => i[filter.column] === filter.value);
-            }
-            return Promise.resolve({ data: items[0] || null, error: null });
-          };
-          return selectBuilder;
+          // Return a new builder in select mode
+          return createBuilder(currentFilters, true);
+        },
+        single: () => {
+          let items = getMockData(tableName);
+          // Apply all filters
+          for (const filter of currentFilters) {
+            items = items.filter((i: any) => i[filter.column] === filter.value);
+          }
+          return Promise.resolve({ data: items[0] || null, error: null });
         },
         insert: (data: any) => {
           const insertBuilder = createBuilder(currentFilters);
@@ -150,12 +171,13 @@ function createMockClient() {
           setMockData(tableName, items);
           return Promise.resolve({ data: itemData, error: null });
         },
-        order: () => createBuilder(currentFilters),
-        limit: () => createBuilder(currentFilters),
+        order: () => createBuilder(currentFilters, isSelectMode),
+        limit: () => createBuilder(currentFilters, isSelectMode),
         eq: (column: string, value: any) => {
-          return createBuilder([...currentFilters, { column, value }]);
+          // Preserve select mode when adding filters
+          return createBuilder([...currentFilters, { column, value }], isSelectMode);
         },
-        in: () => createBuilder(currentFilters),
+        in: () => createBuilder(currentFilters, isSelectMode),
       };
 
       // Make it awaitable

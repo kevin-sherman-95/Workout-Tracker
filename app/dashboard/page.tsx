@@ -7,6 +7,12 @@ import { format } from "date-fns";
 import { WorkoutCalendar } from "@/components/workout-calendar";
 import { DashboardStats } from "@/components/dashboard-stats";
 
+// Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
+const parseLocalDate = (dateString: string): Date => {
+  const [year, month, day] = dateString.split('-').map(Number);
+  return new Date(year, month - 1, day); // month is 0-indexed
+};
+
 export default async function DashboardPage() {
   // Get recent workouts (will return empty if Supabase not configured)
   let workouts: any[] | null = null;
@@ -60,7 +66,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <DashboardStats 
-          serverWorkouts={workouts} 
+          serverWorkouts={allWorkouts} 
           serverTotalWorkouts={totalWorkouts}
         />
       </div>
@@ -84,7 +90,7 @@ export default async function DashboardPage() {
                     <div>
                       <p className="font-medium">{workout.focus}</p>
                       <p className="text-sm text-muted-foreground">
-                        {format(new Date(workout.workout_date), "MMMM d, yyyy")}
+                        {format(parseLocalDate(workout.workout_date), "MMMM d, yyyy")}
                       </p>
                     </div>
                     <Link href={`/dashboard/history?workout=${workout.id}`}>

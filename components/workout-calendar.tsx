@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,29 +17,53 @@ export function WorkoutCalendar({ workouts = [] }: WorkoutCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [allWorkouts, setAllWorkouts] = useState<Array<{ workout_date: string; focus?: string; id?: string }>>(workouts || []);
 
-  // Load workouts from localStorage in mock mode
-  useEffect(() => {
-    const isMockMode = !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-                      process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder');
+  // Load workouts from localStorage
+  const loadWorkoutsFromLocalStorage = useCallback(() => {
+    if (typeof window === 'undefined') return;
     
-    if (isMockMode && typeof window !== 'undefined') {
-      const mockWorkouts = JSON.parse(localStorage.getItem('mock-workouts') || '[]');
-      const mockUser = JSON.parse(sessionStorage.getItem('mock-user') || 'null');
-      
-      // Filter by user if mock user exists
-      const userWorkouts = mockUser 
-        ? mockWorkouts.filter((w: any) => w.user_id === mockUser.id)
-        : mockWorkouts;
-      
-      setAllWorkouts(userWorkouts.map((w: any) => ({
-        workout_date: w.workout_date,
-        focus: w.focus,
-        id: w.id,
-      })));
-    } else {
-      setAllWorkouts(workouts || []);
+    const mockWorkouts = JSON.parse(localStorage.getItem('mock-workouts') || '[]');
+    const mockUser = JSON.parse(sessionStorage.getItem('mock-user') || 'null');
+    
+    // Filter by user if mock user exists
+    const userWorkouts = mockUser 
+      ? mockWorkouts.filter((w: any) => w.user_id === mockUser.id)
+      : mockWorkouts;
+    
+    setAllWorkouts(userWorkouts.map((w: any) => ({
+      workout_date: w.workout_date,
+      focus: w.focus,
+      id: w.id,
+    })));
+  }, []);
+
+  // Load workouts on mount and when server workouts change
+  useEffect(() => {
+    // If we have valid server data, use it
+    if (workouts && workouts.length > 0) {
+      setAllWorkouts(workouts);
+      return;
     }
-  }, [workouts]);
+    
+    // Otherwise, always try to load from localStorage as fallback
+    loadWorkoutsFromLocalStorage();
+  }, [workouts, loadWorkoutsFromLocalStorage]);
+
+  // Listen for workout updates to refresh the calendar
+  useEffect(() => {
+    const handleWorkoutUpdate = () => {
+      loadWorkoutsFromLocalStorage();
+    };
+
+    // Listen for custom event (same-tab updates)
+    window.addEventListener('workoutUpdated', handleWorkoutUpdate);
+    // Listen for storage events (cross-tab updates)
+    window.addEventListener('storage', handleWorkoutUpdate);
+
+    return () => {
+      window.removeEventListener('workoutUpdated', handleWorkoutUpdate);
+      window.removeEventListener('storage', handleWorkoutUpdate);
+    };
+  }, [loadWorkoutsFromLocalStorage]);
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -47,7 +71,7 @@ export function WorkoutCalendar({ workouts = [] }: WorkoutCalendarProps) {
 
   // Get first day of month to determine offset
   const firstDayOfWeek = getDay(monthStart);
-  const daysOffset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1; // Convert Sunday (0) to be last
+  const daysOffset = firstDayOfWeek; // Sunday (0) is first day of week
 
   // Create array with empty cells for days before month starts
   const emptyDays = Array.from({ length: daysOffset }, (_, i) => null);
@@ -88,7 +112,7 @@ export function WorkoutCalendar({ workouts = [] }: WorkoutCalendarProps) {
     setCurrentDate(addMonths(currentDate, 1));
   };
 
-  const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
     <Card>

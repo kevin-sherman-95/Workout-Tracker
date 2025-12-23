@@ -39,6 +39,10 @@ function createAuth0Client(): Auth0Client | null {
   }
 
   return new Auth0Client({
+    // Force Google to show account picker every time
+    authorizationParameters: {
+      prompt: 'select_account',
+    },
     // Sync user to Supabase after successful login
     async onCallback(error, context, session) {
       const baseUrl = process.env.APP_BASE_URL || process.env.AUTH0_BASE_URL || 'http://localhost:3000';
@@ -83,3 +87,4 @@ function createAuth0Client(): Auth0Client | null {
 }
 
 export const auth0 = createAuth0Client();
+

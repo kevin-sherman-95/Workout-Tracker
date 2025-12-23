@@ -33,7 +33,7 @@ export interface WorkoutWithExercises extends Workout {
 }
 
 export type WorkoutFocus = 
-  | "Chest/Triceps/Shoulders"
+  | "Chest / Shoulders / Triceps"
   | "Back/Biceps"
   | "Legs"
   | "Full Body"
