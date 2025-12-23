@@ -22,7 +22,6 @@ export default async function DashboardLayout({
     if (session?.user) {
       userName = session.user.name || session.user.nickname || null;
       userPicture = session.user.picture || null;
-      }
     }
   } catch (error) {
     console.warn("Failed to get Auth0 session:", error);
