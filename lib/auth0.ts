@@ -30,7 +30,7 @@ export function isAuth0Configured(): boolean {
  * This forces Google to display the account selection screen on every login
  */
 export const auth0 = new Auth0Client({
-  authorizationParams: {
+  authorizationParameters: {
     prompt: 'select_account',
     max_age: 0, // Force re-authentication
   },
