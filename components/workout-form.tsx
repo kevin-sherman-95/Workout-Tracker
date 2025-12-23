@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@auth0/nextjs-auth0/client";
 import { createClient, isInMockMode } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,11 @@ interface WorkoutFormProps {
 
 export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: WorkoutFormProps) {
   const router = useRouter();
+  const { user, isLoading: isUserLoading } = useUser();
+  
+  // Get user ID from Auth0 hook or prop
+  const userId = propUserId || user?.sub || null;
+  
   const [focus, setFocus] = useState<WorkoutFocus>("Chest / Shoulders / Triceps");
   const [workoutDate, setWorkoutDate] = useState(
     initialDate || new Date().toISOString().split("T")[0]
@@ -201,11 +207,11 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       const client = createClient();
       const isMockMode = isInMockMode();
       
-      // Get user ID for usage tracking - use prop from Auth0 or fall back to mock
-      const userId = propUserId || 'mock-user-id';
+      // Get user ID for usage tracking - use component-level userId or fall back to mock
+      const effectUserId = userId || 'mock-user-id';
       
       // Load usage data first
-      const usageMap = await loadExerciseUsage(client, userId, isMockMode);
+      const usageMap = await loadExerciseUsage(client, effectUserId, isMockMode);
       setExerciseUsage(usageMap);
       
       // In mock mode, always use mock exercises directly
@@ -267,7 +273,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     };
 
     loadExercises();
-  }, [focus, propUserId]);
+  }, [focus, userId]);
 
   // Load existing workout data when editing
   useEffect(() => {
@@ -492,10 +498,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
 
       const isMockMode = isInMockMode();
       
-      // Use the userId passed from the server component (Auth0), or fall back to mock user
-      const userId = propUserId || (isMockMode ? 'mock-user-id' : null);
+      // Use the userId from Auth0 hook, or fall back to mock user in mock mode
+      const effectiveUserId = userId || (isMockMode ? 'mock-user-id' : null);
       
-      if (!userId) {
+      if (!effectiveUserId) {
         throw new Error("Not authenticated");
       }
       let workoutIdToUse = currentWorkoutId || workoutId;
@@ -509,7 +515,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             : [];
           const newWorkout = {
             id: `mock-${Date.now()}`,
-            user_id: userId,
+            user_id: effectiveUserId,
             workout_date: workoutDate,
             focus,
             notes: notes || null,
@@ -526,7 +532,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           const { data: workout, error: workoutError } = await client
             .from("workouts")
             .insert({
-              user_id: userId,
+              user_id: effectiveUserId,
               workout_date: workoutDate,
               focus,
               notes: notes || null,
@@ -709,10 +715,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       // For testing: allow saving workouts even without real authentication
       const isMockMode = isInMockMode();
       
-      // Use the userId passed from the server component (Auth0), or fall back to mock user
-      const userId = propUserId || (isMockMode ? 'mock-user-id' : null);
+      // Use the userId from Auth0 hook, or fall back to mock user in mock mode
+      const effectiveUserId = userId || (isMockMode ? 'mock-user-id' : null);
       
-      if (!userId) {
+      if (!effectiveUserId) {
         throw new Error("Not authenticated");
       }
 
@@ -780,7 +786,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             : [];
           const newWorkout = {
             id: `mock-${Date.now()}`,
-            user_id: userId,
+            user_id: effectiveUserId,
             workout_date: workoutDate,
             focus,
             notes: notes || null,
@@ -797,7 +803,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           const { data: workout, error: workoutError } = await client
             .from("workouts")
             .insert({
-              user_id: userId,
+              user_id: effectiveUserId,
               workout_date: workoutDate,
               focus,
               notes: notes || null,
