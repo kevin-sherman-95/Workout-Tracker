@@ -59,3 +59,5 @@ CREATE POLICY "Service role has full access to workout_exercises"
 
 -- Create index on users email for faster lookups
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+

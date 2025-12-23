@@ -1,13 +1,18 @@
-import { createClient } from "@/lib/supabase/server";
+import { getSupabaseWithUser } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressChart } from "@/components/progress-chart";
 import { format, startOfWeek, startOfMonth, subWeeks, subMonths, eachWeekOfInterval, eachMonthOfInterval } from "date-fns";
 import type { WorkoutWithExercises } from "@/lib/types";
 
 async function getWorkouts() {
-  const supabase = await createClient();
+  const { supabase, userId } = await getSupabaseWithUser();
   
   try {
+    // Only fetch workouts if we have a valid user
+    if (!userId) {
+      return null;
+    }
+    
     const { data: workouts } = await supabase
       .from("workouts")
       .select(`
@@ -17,6 +22,7 @@ async function getWorkouts() {
           exercise:exercises (*)
         )
       `)
+      .eq("user_id", userId)
       .order("workout_date", { ascending: true });
 
     return workouts as WorkoutWithExercises[] | null;

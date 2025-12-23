@@ -1,44 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { auth0, isAuth0Configured } from '@/lib/auth0';
 
 export async function middleware(request: NextRequest) {
   // If Auth0 is not configured, allow all routes (development mode)
-  if (!isAuth0Configured() || !auth0) {
+  if (!isAuth0Configured()) {
     console.warn('Auth0 not configured - running in development mode without authentication');
     return NextResponse.next();
   }
 
-  // Auth0 handles the authentication middleware
-  const authResponse = await auth0.middleware(request);
-
-  // If Auth0 middleware returns a response (redirect, etc.), use it
-  if (authResponse.status !== 200 || authResponse.headers.get('location')) {
-    return authResponse;
-  }
-
-  // For protected routes, check if user is authenticated
-  if (request.nextUrl.pathname.startsWith('/dashboard')) {
-    const session = await auth0.getSession();
-    
-    if (!session) {
-      // Redirect to login if not authenticated
-      return NextResponse.redirect(new URL('/login', request.url));
-    }
-  }
-
-  // If user is authenticated and trying to access login/signup, redirect to dashboard
-  if (
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/signup')
-  ) {
-    const session = await auth0.getSession();
-    
-    if (session) {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-  }
-
-  return authResponse;
+  // Let Auth0 middleware handle authentication
+  return await auth0.middleware(request);
 }
 
 export const config = {

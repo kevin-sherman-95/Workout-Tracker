@@ -120,3 +120,5 @@ CREATE POLICY "Anyone can view exercises"
   ON exercises FOR SELECT
   USING (true);
 
+
+

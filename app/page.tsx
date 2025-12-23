@@ -1,28 +1,16 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { auth0 } from "@/lib/auth0";
 
 export default async function Home() {
-  // BYPASS AUTH FOR TESTING
-  const BYPASS_AUTH = process.env.BYPASS_AUTH === 'true' || 
-    !process.env.NEXT_PUBLIC_SUPABASE_URL || 
-    process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')
+  // Check if user is authenticated via Auth0
+  const session = await auth0.getSession();
 
-  if (BYPASS_AUTH) {
+  if (session) {
+    // User is logged in, redirect to dashboard
     redirect("/dashboard");
-  }
-
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (user) {
-      redirect("/dashboard");
-    } else {
-      redirect("/login");
-    }
-  } catch (error) {
-    // If Supabase not configured, redirect to dashboard for testing
-    redirect("/dashboard");
+  } else {
+    // User is not logged in, redirect to login page
+    redirect("/login");
   }
 }
 

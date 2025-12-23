@@ -66,7 +66,7 @@ export default function LoginPage() {
             </>
           ) : (
             <>
-              <a href="/auth/login" className="block">
+              <a href="/auth/login?prompt=select_account" className="block">
                 <Button className="w-full" size="lg">
                   Sign In / Sign Up
                 </Button>

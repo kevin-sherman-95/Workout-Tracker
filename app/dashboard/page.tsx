@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getSupabaseWithUser } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -21,25 +21,32 @@ export default async function DashboardPage() {
   let allWorkouts: any[] | null = null;
   
   try {
-    const supabase = await createClient();
-    const workoutsResult = await supabase
-      .from("workouts")
-      .select("id, workout_date, focus, created_at")
-      .order("workout_date", { ascending: false })
-      .limit(5);
-    workouts = workoutsResult?.data || null;
+    const { supabase, userId } = await getSupabaseWithUser();
+    
+    // Only fetch workouts if we have a valid user
+    if (userId) {
+      const workoutsResult = await supabase
+        .from("workouts")
+        .select("id, workout_date, focus, created_at")
+        .eq("user_id", userId)
+        .order("workout_date", { ascending: false })
+        .limit(5);
+      workouts = workoutsResult?.data || null;
 
-    // Get all workouts for calendar
-    const allWorkoutsResult = await supabase
-      .from("workouts")
-      .select("id, workout_date, focus, created_at")
-      .order("workout_date", { ascending: true });
-    allWorkouts = allWorkoutsResult?.data || null;
+      // Get all workouts for calendar
+      const allWorkoutsResult = await supabase
+        .from("workouts")
+        .select("id, workout_date, focus, created_at")
+        .eq("user_id", userId)
+        .order("workout_date", { ascending: true });
+      allWorkouts = allWorkoutsResult?.data || null;
 
-    const countResult = await supabase
-      .from("workouts")
-      .select("*", { count: "exact", head: true });
-    totalWorkouts = countResult?.count || 0;
+      const countResult = await supabase
+        .from("workouts")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", userId);
+      totalWorkouts = countResult?.count || 0;
+    }
   } catch (error) {
     // Supabase not configured, use empty data for testing
     workouts = null;

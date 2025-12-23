@@ -23,6 +23,7 @@ export function createClient() {
   // Return a mock client if credentials are missing or URL is invalid
   if (!isValidUrl(supabaseUrl) || !supabaseKey || 
       supabaseUrl!.includes('placeholder') || 
+      supabaseUrl!.includes('your-project') ||
       supabaseUrl === 'your_supabase_url') {
     return createMockClient();
   }
@@ -39,6 +40,7 @@ export function isInMockMode(): boolean {
   
   if (!supabaseUrl || !supabaseKey || 
       supabaseUrl.includes('placeholder') || 
+      supabaseUrl.includes('your-project') ||
       supabaseUrl === 'your_supabase_url') {
     return true;
   }

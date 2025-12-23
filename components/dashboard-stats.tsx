@@ -50,6 +50,7 @@ export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: Dashboar
       // Check if we're in mock mode - no URL, placeholder, or invalid URL
       const isMockMode = !supabaseUrl || 
                         supabaseUrl.includes('placeholder') || 
+                        supabaseUrl.includes('your-project') ||
                         supabaseUrl === 'your_supabase_url' ||
                         !supabaseUrl.startsWith('http');
       
@@ -88,6 +89,7 @@ export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: Dashboar
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const isMockMode = !supabaseUrl || 
                         supabaseUrl.includes('placeholder') || 
+                        supabaseUrl.includes('your-project') ||
                         supabaseUrl === 'your_supabase_url' ||
                         !supabaseUrl.startsWith('http');
       

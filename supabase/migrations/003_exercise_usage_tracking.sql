@@ -1,7 +1,8 @@
 -- Table to track exercise usage per user for personalized sorting
+-- Updated for Auth0 integration (user_id is TEXT, not UUID)
 CREATE TABLE user_exercise_usage (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   exercise_id UUID NOT NULL REFERENCES exercises(id) ON DELETE CASCADE,
   usage_count INTEGER NOT NULL DEFAULT 1,
   last_used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -17,20 +18,8 @@ CREATE INDEX idx_user_exercise_usage_count ON user_exercise_usage(user_id, usage
 -- Enable Row Level Security
 ALTER TABLE user_exercise_usage ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for user_exercise_usage
-CREATE POLICY "Users can view their own exercise usage"
-  ON user_exercise_usage FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert their own exercise usage"
-  ON user_exercise_usage FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own exercise usage"
-  ON user_exercise_usage FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own exercise usage"
-  ON user_exercise_usage FOR DELETE
-  USING (auth.uid() = user_id);
-
+-- Permissive policy for service role access (Auth0 handles authorization at app level)
+CREATE POLICY "Service role has full access to user_exercise_usage"
+  ON user_exercise_usage FOR ALL
+  USING (true)
+  WITH CHECK (true);

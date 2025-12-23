@@ -36,7 +36,7 @@ export async function getSupabaseWithUser() {
   };
 
   // Return mock client if Supabase is not configured or URL is invalid
-  if (!isValidUrl(supabaseUrl) || !supabaseServiceKey || supabaseUrl!.includes('placeholder')) {
+  if (!isValidUrl(supabaseUrl) || !supabaseServiceKey || supabaseUrl!.includes('placeholder') || supabaseUrl!.includes('your-project')) {
     return {
       supabase: createMockSupabaseClient(),
       userId: userId || 'mock-user',
