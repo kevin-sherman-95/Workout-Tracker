@@ -24,15 +24,26 @@ export async function getSupabaseWithUser() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  // Return mock client if Supabase is not configured
-  if (!supabaseUrl || !supabaseServiceKey || supabaseUrl.includes('placeholder')) {
+  // Validate that the URL is a proper HTTP/HTTPS URL
+  const isValidUrl = (url: string | undefined): boolean => {
+    if (!url) return false;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  // Return mock client if Supabase is not configured or URL is invalid
+  if (!isValidUrl(supabaseUrl) || !supabaseServiceKey || supabaseUrl!.includes('placeholder')) {
     return {
       supabase: createMockSupabaseClient(),
       userId: userId || 'mock-user',
     };
   }
 
-  const supabase = createSupabaseClient(supabaseUrl, supabaseServiceKey);
+  const supabase = createSupabaseClient(supabaseUrl!, supabaseServiceKey);
 
   return { supabase, userId };
 }

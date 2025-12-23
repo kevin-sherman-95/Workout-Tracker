@@ -1,5 +1,6 @@
 import { Nav } from "@/components/nav";
 import { createClient } from "@/lib/supabase/server";
+import { auth0 } from "@/lib/auth0";
 import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
@@ -11,6 +12,22 @@ export default async function DashboardLayout({
   const BYPASS_AUTH = process.env.BYPASS_AUTH === 'true' || 
     !process.env.NEXT_PUBLIC_SUPABASE_URL || 
     process.env.NEXT_PUBLIC_SUPABASE_URL.includes('placeholder')
+
+  let userName: string | null = null;
+  let userPicture: string | null = null;
+
+  // Try to get user from Auth0
+  try {
+    if (auth0) {
+      const session = await auth0.getSession();
+      if (session?.user) {
+        userName = session.user.name || session.user.nickname || null;
+        userPicture = session.user.picture || null;
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to get Auth0 session:", error);
+  }
 
   if (!BYPASS_AUTH) {
     try {
@@ -28,7 +45,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="min-h-screen bg-background">
-      <Nav />
+      <Nav userName={userName} userPicture={userPicture} />
       <main className="container mx-auto px-4 py-8">{children}</main>
     </div>
   );

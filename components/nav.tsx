@@ -1,12 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Plus, History, TrendingUp, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { LayoutDashboard, Plus, History, TrendingUp, LogOut, User, Settings } from "lucide-react";
 
-export function Nav() {
+interface NavProps {
+  userName?: string | null;
+  userPicture?: string | null;
+}
+
+export function Nav({ userName, userPicture }: NavProps) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -44,12 +56,48 @@ export function Nav() {
               })}
             </div>
           </div>
-          <a href="/auth/logout">
-            <Button variant="ghost" className="flex items-center space-x-2">
-              <LogOut className="h-4 w-4" />
-              <span>Logout</span>
-            </Button>
-          </a>
+          <DropdownMenu
+            trigger={
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2 hover:bg-accent"
+              >
+                {userPicture ? (
+                  <img
+                    src={userPicture}
+                    alt=""
+                    className="h-8 w-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+                    <User className="h-4 w-4 text-primary" />
+                  </div>
+                )}
+                <span className="text-sm font-medium text-foreground">
+                  {userName || "Account"}
+                </span>
+              </Button>
+            }
+          >
+            <DropdownMenuLabel>My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+              <User className="h-4 w-4 mr-3" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+              <Settings className="h-4 w-4 mr-3" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => (window.location.href = "/auth/logout")}
+              destructive
+            >
+              <LogOut className="h-4 w-4 mr-3" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenu>
         </div>
       </div>
     </nav>

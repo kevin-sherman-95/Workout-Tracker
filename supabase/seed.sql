@@ -111,6 +111,18 @@ INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Seated Row', id FROM muscle_groups WHERE name = 'Back'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Rows', id FROM muscle_groups WHERE name = 'Back'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Underhand Lat Pull Down', id FROM muscle_groups WHERE name = 'Back'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Close Grip Pull Down', id FROM muscle_groups WHERE name = 'Back'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
 -- Biceps exercises
 INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Barbell Curl', id FROM muscle_groups WHERE name = 'Biceps'
@@ -134,6 +146,18 @@ ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Concentration Curl', id FROM muscle_groups WHERE name = 'Biceps'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Rope Curls', id FROM muscle_groups WHERE name = 'Biceps'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT '21 Curls', id FROM muscle_groups WHERE name = 'Biceps'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Hammer 21 Curls', id FROM muscle_groups WHERE name = 'Biceps'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 -- Legs exercises

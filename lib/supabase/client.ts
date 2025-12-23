@@ -9,12 +9,23 @@ export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // Return a mock client if credentials are missing (for testing)
-  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
+  // Validate that the URL is a proper HTTP/HTTPS URL
+  const isValidUrl = (url: string | undefined): boolean => {
+    if (!url) return false;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  // Return a mock client if credentials are missing or URL is invalid
+  if (!isValidUrl(supabaseUrl) || !supabaseKey || supabaseUrl!.includes('placeholder')) {
     return createMockClient();
   }
 
-  return createBrowserClient(supabaseUrl, supabaseKey);
+  return createBrowserClient(supabaseUrl!, supabaseKey);
 }
 
 /**
@@ -41,25 +52,25 @@ function createMockClient() {
 
   const createMockQueryBuilder = (tableName: string): any => {
     const emptyResult = { data: null, error: null, count: 0 };
-    let filterColumn: string | null = null;
-    let filterValue: any = null;
+    // Support multiple filters
+    let filters: Array<{ column: string; value: any }> = [];
 
-    const createBuilder = () => {
+    const createBuilder = (currentFilters: Array<{ column: string; value: any }> = []) => {
       const builder: any = {
         select: () => {
-          const selectBuilder = createBuilder();
+          const selectBuilder = createBuilder(currentFilters);
           selectBuilder.single = () => {
-            const items = getMockData(tableName);
-            if (filterColumn && filterValue !== null) {
-              const item = items.find((i: any) => i[filterColumn!] === filterValue);
-              return Promise.resolve({ data: item || null, error: null });
+            let items = getMockData(tableName);
+            // Apply all filters
+            for (const filter of currentFilters) {
+              items = items.filter((i: any) => i[filter.column] === filter.value);
             }
             return Promise.resolve({ data: items[0] || null, error: null });
           };
           return selectBuilder;
         },
         insert: (data: any) => {
-          const insertBuilder = createBuilder();
+          const insertBuilder = createBuilder(currentFilters);
           insertBuilder.select = () => insertBuilder;
           insertBuilder.single = () => {
             const items = getMockData(tableName);
@@ -73,28 +84,57 @@ function createMockClient() {
           return insertBuilder;
         },
         update: (data: any) => {
-          const updateBuilder = createBuilder();
-          updateBuilder.eq = (column: string, value: any) => {
-            const items = getMockData(tableName);
-            const index = items.findIndex((i: any) => i[column] === value);
-            if (index !== -1) {
-              items[index] = { ...items[index], ...data, updated_at: new Date().toISOString() };
-              setMockData(tableName, items);
-              return Promise.resolve({ data: items[index], error: null });
-            }
-            return Promise.resolve({ data: null, error: null });
+          const updateFilters: Array<{ column: string; value: any }> = [];
+          const createUpdateBuilder = (): any => {
+            const updateBuilder: any = {
+              eq: (column: string, value: any) => {
+                updateFilters.push({ column, value });
+                return createUpdateBuilder();
+              },
+              then: (resolve: any) => {
+                const items = getMockData(tableName);
+                // Find items matching all filters
+                const matchingIndices: number[] = [];
+                items.forEach((item: any, index: number) => {
+                  const matches = updateFilters.every(f => item[f.column] === f.value);
+                  if (matches) matchingIndices.push(index);
+                });
+                // Update matching items
+                matchingIndices.forEach(idx => {
+                  items[idx] = { ...items[idx], ...data, updated_at: new Date().toISOString() };
+                });
+                setMockData(tableName, items);
+                return Promise.resolve({ data: null, error: null }).then(resolve);
+              },
+              catch: (reject: any) => Promise.resolve(emptyResult).catch(reject),
+            };
+            return updateBuilder;
           };
-          return updateBuilder;
+          return createUpdateBuilder();
         },
         delete: () => {
-          const deleteBuilder = createBuilder();
-          deleteBuilder.eq = (column: string, value: any) => {
-            const items = getMockData(tableName);
-            const filtered = items.filter((i: any) => i[column] !== value);
-            setMockData(tableName, filtered);
-            return Promise.resolve({ data: null, error: null });
+          const deleteFilters: Array<{ column: string; value: any }> = [];
+          const createDeleteBuilder = (): any => {
+            const deleteBuilder: any = {
+              eq: (column: string, value: any) => {
+                deleteFilters.push({ column, value });
+                return createDeleteBuilder();
+              },
+              then: (resolve: any) => {
+                const items = getMockData(tableName);
+                // Filter out items matching ALL filters
+                const filtered = items.filter((item: any) => {
+                  const matches = deleteFilters.every(f => item[f.column] === f.value);
+                  return !matches; // Keep items that don't match all filters
+                });
+                setMockData(tableName, filtered);
+                return Promise.resolve({ data: null, error: null }).then(resolve);
+              },
+              catch: (reject: any) => Promise.resolve(emptyResult).catch(reject),
+            };
+            return deleteBuilder;
           };
-          return deleteBuilder;
+          return createDeleteBuilder();
         },
         upsert: (data: any, options?: { onConflict?: string }) => {
           const items = getMockData(tableName);
@@ -110,21 +150,20 @@ function createMockClient() {
           setMockData(tableName, items);
           return Promise.resolve({ data: itemData, error: null });
         },
-        order: () => createBuilder(),
-        limit: () => createBuilder(),
+        order: () => createBuilder(currentFilters),
+        limit: () => createBuilder(currentFilters),
         eq: (column: string, value: any) => {
-          filterColumn = column;
-          filterValue = value;
-          return createBuilder();
+          return createBuilder([...currentFilters, { column, value }]);
         },
-        in: () => createBuilder(),
+        in: () => createBuilder(currentFilters),
       };
 
       // Make it awaitable
       builder.then = (resolve: any) => {
         let items = getMockData(tableName);
-        if (filterColumn && filterValue !== null) {
-          items = items.filter((i: any) => i[filterColumn!] === filterValue);
+        // Apply all filters
+        for (const filter of currentFilters) {
+          items = items.filter((i: any) => i[filter.column] === filter.value);
         }
         return Promise.resolve({ data: items, error: null }).then(resolve);
       };
@@ -133,10 +172,15 @@ function createMockClient() {
       return builder;
     };
 
-    return createBuilder();
+    return createBuilder([]);
   };
 
   return {
     from: (tableName: string) => createMockQueryBuilder(tableName),
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null }, error: null }),
+      getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    },
   } as any;
 }
