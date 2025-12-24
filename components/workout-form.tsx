@@ -830,12 +830,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       console.log('💪 Creating workout exercises...');
       const workoutExercises = exercisesToSave.flatMap((exercise, exerciseIndex) =>
         exercise.sets.map((set, setIndex) => {
-          const exerciseName = exercises.find(e => e.id === exercise.exerciseId)?.name || 'Unknown Exercise';
           console.log(`  Set ${setIndex + 1}: weight=${set.weight}, reps=${set.reps}`);
           return {
             workout_id: workoutIdToUse,
             exercise_id: exercise.exerciseId,
-            exercise_name: exerciseName, // Store exercise name for easy lookup in mock mode
             set_number: setIndex + 1,
             reps: set.reps,
             weight: set.weight,
@@ -855,11 +853,16 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           const mockWorkoutExercises = typeof window !== 'undefined'
             ? JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]')
             : [];
-          const newExercises = workoutExercises.map((we, idx) => ({
-            ...we,
-            id: `mock-we-${Date.now()}-${idx}`,
-            created_at: new Date().toISOString(),
-          }));
+          // Add exercise_name only for mock mode (localStorage) - not in Supabase schema
+          const newExercises = workoutExercises.map((we, idx) => {
+            const exerciseName = exercises.find(e => e.id === we.exercise_id)?.name || 'Unknown Exercise';
+            return {
+              ...we,
+              id: `mock-we-${Date.now()}-${idx}`,
+              created_at: new Date().toISOString(),
+              exercise_name: exerciseName,
+            };
+          });
           mockWorkoutExercises.push(...newExercises);
           console.log('✅ Saving to localStorage:', newExercises);
           if (typeof window !== 'undefined') {
