@@ -1,5 +1,6 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
+import { getSession } from '@auth0/nextjs-auth0';
 
 /**
  * Creates a Supabase client with the current Auth0 user context.
@@ -11,11 +12,12 @@ import { cookies } from 'next/headers';
 export async function getSupabaseWithUser() {
   let userId: string | null = null;
   
-  // Try to get user ID from auth cookie (simplified approach)
+  // Get the Auth0 session to retrieve the user ID
   try {
-    // For now, we'll get the user ID from the client-side
-    // Server-side auth check is minimal
-    userId = null;
+    const session = await getSession();
+    if (session?.user?.sub) {
+      userId = session.user.sub;
+    }
   } catch (err) {
     console.error('Failed to get Auth0 session:', err);
   }
