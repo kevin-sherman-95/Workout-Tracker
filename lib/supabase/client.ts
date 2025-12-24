@@ -24,11 +24,24 @@ export function createClient() {
   if (!isValidUrl(supabaseUrl) || !supabaseKey || 
       supabaseUrl!.includes('placeholder') || 
       supabaseUrl!.includes('your-project') ||
-      supabaseUrl === 'your_supabase_url') {
+      supabaseUrl === 'your_supabase_url' ||
+      !isValidSupabaseKey(supabaseKey)) {
     return createMockClient();
   }
 
   return createBrowserClient(supabaseUrl!, supabaseKey);
+}
+
+/**
+ * Validate that the key looks like a valid Supabase anon key (JWT format)
+ */
+function isValidSupabaseKey(key: string | undefined): boolean {
+  if (!key) return false;
+  // Supabase anon keys are JWTs that start with 'eyJ' and have 2 dots
+  if (key.length < 100) return false;
+  if (!key.startsWith('eyJ')) return false;
+  if ((key.match(/\./g) || []).length !== 2) return false;
+  return true;
 }
 
 /**
@@ -41,7 +54,8 @@ export function isInMockMode(): boolean {
   if (!supabaseUrl || !supabaseKey || 
       supabaseUrl.includes('placeholder') || 
       supabaseUrl.includes('your-project') ||
-      supabaseUrl === 'your_supabase_url') {
+      supabaseUrl === 'your_supabase_url' ||
+      !isValidSupabaseKey(supabaseKey)) {
     return true;
   }
   
