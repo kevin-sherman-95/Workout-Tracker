@@ -635,8 +635,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         }
       }
 
-      // Update exercise usage count
-      await updateExerciseUsage(client, userId, exerciseSet.exerciseId, isMockMode);
+      // Update exercise usage count (only if we have a user ID)
+      if (userId) {
+        await updateExerciseUsage(client, userId, exerciseSet.exerciseId, isMockMode);
+      }
 
       // Mark exercise as saved
       setSavedExercises(prev => new Set(prev).add(exerciseIndex));
@@ -877,11 +879,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           console.log('✅ Saved to Supabase successfully');
         }
         
-        console.log('📊 Updating exercise usage counts...');
-        // Update usage counts for all exercises in the workout
-        const uniqueExerciseIds = [...new Set(exercisesToSave.map(e => e.exerciseId))];
-        for (const exerciseId of uniqueExerciseIds) {
-          await updateExerciseUsage(client, userId, exerciseId, isMockMode);
+        // Update usage counts for all exercises in the workout (only if we have a user ID)
+        if (userId) {
+          console.log('📊 Updating exercise usage counts...');
+          const uniqueExerciseIds = [...new Set(exercisesToSave.map(e => e.exerciseId))];
+          for (const exerciseId of uniqueExerciseIds) {
+            await updateExerciseUsage(client, userId, exerciseId, isMockMode);
+          }
         }
       } else {
         console.warn('⚠️ No workout exercises to save (length is 0)');

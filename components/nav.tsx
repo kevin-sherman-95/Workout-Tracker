@@ -91,7 +91,7 @@ export function Nav({ userName, userPicture }: NavProps) {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onClick={() => (window.location.href = "/api/auth/logout")}
+              onClick={() => (window.location.href = "/auth/logout")}
               destructive
             >
               <LogOut className="h-4 w-4 mr-3" />

@@ -35,7 +35,7 @@ export default function SignupPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <a href="/api/auth/login?screen_hint=signup&returnTo=/dashboard" className="block">
+          <a href="/auth/login?screen_hint=signup&returnTo=/dashboard" className="block">
             <Button className="w-full" size="lg">
               Sign Up
             </Button>
