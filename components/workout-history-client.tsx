@@ -214,13 +214,10 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
           .eq("id", workoutId);
       }
       
-      // Update local state
+      // Update local state - this is sufficient for the UI update
+      // Don't dispatch workoutUpdated event as it would trigger loadWorkoutsFromLocalStorage
+      // which overwrites state with empty localStorage data when using Supabase
       setWorkouts(prev => prev?.filter(w => w.id !== workoutId) || null);
-      
-      // Dispatch event to update other components (calendar, stats)
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new Event('workoutUpdated'));
-      }
     } catch (error) {
       console.error('Failed to delete workout:', error);
     } finally {
