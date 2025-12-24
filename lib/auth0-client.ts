@@ -6,7 +6,7 @@ export const auth0 = new Auth0Client({
   // The client reads from environment variables automatically:
   // AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_SECRET, APP_BASE_URL
   
-  authorizationParams: {
+  authorizationParameters: {
     // Always show the account picker screen
     prompt: 'select_account',
   },
