@@ -229,7 +229,7 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
   // Get all available workout focuses (predefined types)
   const allWorkoutFocuses: WorkoutFocus[] = [
     "Chest / Shoulders / Triceps",
-    "Back/Biceps",
+    "Back / Biceps",
     "Legs",
     "Full Body",
     "Cardio",

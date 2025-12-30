@@ -184,7 +184,7 @@ export function SettingsClient({ user }: SettingsClientProps) {
                   <select className="w-full px-3 py-2 rounded-lg bg-accent border border-border text-foreground">
                     <option value="">No default</option>
                     <option value="Chest / Shoulders / Triceps">Chest / Shoulders / Triceps</option>
-                    <option value="Back/Biceps">Back/Biceps</option>
+                    <option value="Back / Biceps">Back / Biceps</option>
                     <option value="Legs">Legs</option>
                     <option value="Full Body">Full Body</option>
                     <option value="Cardio">Cardio</option>

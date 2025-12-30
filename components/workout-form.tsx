@@ -20,7 +20,7 @@ interface ExerciseUsage {
 
 interface ExerciseSet {
   exerciseId: string;
-  sets: Array<{ reps: number; weight: number }>;
+  sets: Array<{ reps: number; weight: number; distance?: number; time?: number }>;
   restInterval: string;
 }
 
@@ -61,7 +61,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
 
   const focusOptions: WorkoutFocus[] = [
     "Chest / Shoulders / Triceps",
-    "Back/Biceps",
+    "Back / Biceps",
     "Legs",
     "Full Body",
     "Cardio",
@@ -76,11 +76,109 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     { value: "180", label: "3 minutes" },
   ];
 
+  // Helper functions for time formatting (stored as total seconds)
+  const formatTimeDisplay = (totalSeconds: number): string => {
+    if (totalSeconds === 0) return "";
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const parseTimeInput = (value: string): number => {
+    // Handle empty input
+    if (!value || value.trim() === "") return 0;
+    
+    // If it contains a colon, parse as MM:SS
+    if (value.includes(":")) {
+      const [minStr, secStr] = value.split(":");
+      const minutes = parseInt(minStr) || 0;
+      const seconds = parseInt(secStr) || 0;
+      return minutes * 60 + seconds;
+    }
+    
+    // Otherwise treat as minutes only
+    const minutes = parseInt(value) || 0;
+    return minutes * 60;
+  };
+
+  // State for time input display values (what's shown in the input while typing)
+  const [timeDisplayValues, setTimeDisplayValues] = useState<Record<string, string>>({});
+  
+  // Get display value for a time input
+  const getTimeDisplayValue = (exerciseIndex: number, setIndex: number, storedSeconds: number): string => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    // If user is actively editing, use the display value state
+    if (timeDisplayValues[key] !== undefined) {
+      return timeDisplayValues[key];
+    }
+    // Otherwise, format the stored seconds
+    if (!storedSeconds) return "";
+    const mins = Math.floor(storedSeconds / 60);
+    const secs = storedSeconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+  
+  // Handle time input change (while typing) - format in real-time
+  const handleTimeInputChange = (exerciseIndex: number, setIndex: number, value: string) => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    // Extract only digits
+    const digits = value.replace(/\D/g, "");
+    
+    // Limit to 4 digits (MM:SS)
+    const limited = digits.slice(0, 4);
+    
+    // Format with colon: if we have 3+ digits, insert colon after first 2
+    let formatted: string;
+    if (limited.length <= 2) {
+      formatted = limited;
+    } else {
+      formatted = limited.slice(0, limited.length - 2) + ":" + limited.slice(-2);
+    }
+    
+    setTimeDisplayValues(prev => ({ ...prev, [key]: formatted }));
+    
+    // Also update the stored time value immediately
+    if (limited.length >= 1) {
+      const padded = limited.padStart(4, "0");
+      const mins = parseInt(padded.slice(0, 2), 10);
+      const secs = parseInt(padded.slice(2), 10);
+      const totalSeconds = mins * 60 + secs;
+      updateSet(exerciseIndex, setIndex, "time", totalSeconds);
+    } else {
+      updateSet(exerciseIndex, setIndex, "time", 0);
+    }
+  };
+  
+  // Handle time input blur - ensure proper formatting
+  const handleTimeInputBlur = (exerciseIndex: number, setIndex: number) => {
+    const key = `${exerciseIndex}-${setIndex}`;
+    const currentValue = timeDisplayValues[key] || "";
+    const digits = currentValue.replace(/\D/g, "");
+    
+    if (!digits) {
+      // Clear the display
+      setTimeDisplayValues(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+      return;
+    }
+    
+    // Ensure proper MM:SS format
+    const padded = digits.padStart(4, "0");
+    const mins = parseInt(padded.slice(0, 2), 10);
+    const secs = parseInt(padded.slice(2), 10);
+    const formatted = `${mins}:${secs.toString().padStart(2, "0")}`;
+    
+    setTimeDisplayValues(prev => ({ ...prev, [key]: formatted }));
+  };
+
   // Get muscle groups for the selected focus
   const getMuscleGroupsForFocus = (focus: WorkoutFocus): string[] => {
     const mapping: Record<WorkoutFocus, string[]> = {
       "Chest / Shoulders / Triceps": ["Chest", "Triceps", "Shoulders"],
-      "Back/Biceps": ["Back", "Biceps"],
+      "Back / Biceps": ["Back", "Biceps"],
       "Legs": ["Legs"],
       "Full Body": ["Chest", "Triceps", "Shoulders", "Back", "Biceps", "Legs", "Core"],
       "Cardio": ["Cardio"],
@@ -106,7 +204,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         "Tricep Pushdowns",
         "Tricep Rope Pulldowns",
       ],
-      "Back/Biceps": [
+      "Back / Biceps": [
         "Deadlift",
         "Pull-ups",
         "Barbell Row",
@@ -141,6 +239,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         "Running",
         "Cycling",
         "Rowing",
+        "Swimming",
       ],
       "Other": [
         "Custom Exercise",
@@ -332,6 +431,8 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         }
 
         // Group exercises by exercise_id and convert to ExerciseSet format
+        // For cardio workouts, weight stores distance and reps stores time
+        const isCardioWorkout = (workout.focus as WorkoutFocus) === "Cardio";
         const exercisesByExerciseId = workoutExercises.reduce((acc, we) => {
           if (!acc[we.exercise_id]) {
             acc[we.exercise_id] = {
@@ -340,10 +441,11 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
               restInterval: we.rest_interval?.toString() || "60", // Default to 60 seconds
             };
           }
-          acc[we.exercise_id].sets.push({
-            reps: we.reps,
-            weight: we.weight,
-          });
+          acc[we.exercise_id].sets.push(
+            isCardioWorkout
+              ? { reps: 0, weight: 0, distance: we.weight, time: we.reps }
+              : { reps: we.reps, weight: we.weight }
+          );
           return acc;
         }, {} as Record<string, ExerciseSet>);
 
@@ -376,11 +478,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const addExercise = () => {
     // Always add an exercise, even if list is empty (will show "No exercises available")
     const defaultExerciseId = exercises.length > 0 ? exercises[0].id : "";
+    const isCardio = focus === "Cardio";
     setSelectedExercises((prev) => [
       ...prev,
       {
         exerciseId: defaultExerciseId,
-        sets: [{ reps: 0, weight: 0 }],
+        sets: [isCardio ? { reps: 0, weight: 0, distance: 0, time: 0 } : { reps: 0, weight: 0 }],
         restInterval: "60", // Default to 60 seconds
       },
     ]);
@@ -391,12 +494,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const addSet = (exerciseIndex: number) => {
+    const isCardio = focus === "Cardio";
     setSelectedExercises(prev =>
       prev.map((exercise, idx) => {
         if (idx !== exerciseIndex) return exercise;
         return {
           ...exercise,
-          sets: [...exercise.sets, { reps: 0, weight: 0 }],
+          sets: [...exercise.sets, isCardio ? { reps: 0, weight: 0, distance: 0, time: 0 } : { reps: 0, weight: 0 }],
         };
       })
     );
@@ -429,7 +533,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const updateSet = (
     exerciseIndex: number,
     setIndex: number,
-    field: "reps" | "weight",
+    field: "reps" | "weight" | "distance" | "time",
     value: number
   ) => {
     setSelectedExercises(prev =>
@@ -600,12 +704,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       }
 
       // Insert new workout exercises for this exercise
+      // For cardio, we store distance in weight field and time in reps field
+      const isCardioWorkout = focus === "Cardio";
       const workoutExercises = exerciseSet.sets.map((set, setIndex) => ({
         workout_id: workoutIdToUse,
         exercise_id: exerciseSet.exerciseId,
         set_number: setIndex + 1,
-        reps: set.reps,
-        weight: set.weight,
+        reps: isCardioWorkout ? (set.time ?? 0) : set.reps,
+        weight: isCardioWorkout ? (set.distance ?? 0) : set.weight,
         rest_interval: parseInt(exerciseSet.restInterval) || 60,
       }));
 
@@ -827,16 +933,18 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       }
 
       // Create workout exercises
+      // For cardio, we store distance in weight field and time in reps field
+      const isCardioWorkout = focus === "Cardio";
       console.log('💪 Creating workout exercises...');
       const workoutExercises = exercisesToSave.flatMap((exercise, exerciseIndex) =>
         exercise.sets.map((set, setIndex) => {
-          console.log(`  Set ${setIndex + 1}: weight=${set.weight}, reps=${set.reps}`);
+          console.log(`  Set ${setIndex + 1}: ${isCardioWorkout ? `distance=${set.distance}, time=${set.time}` : `weight=${set.weight}, reps=${set.reps}`}`);
           return {
             workout_id: workoutIdToUse,
             exercise_id: exercise.exerciseId,
             set_number: setIndex + 1,
-            reps: set.reps,
-            weight: set.weight,
+            reps: isCardioWorkout ? (set.time ?? 0) : set.reps,
+            weight: isCardioWorkout ? (set.distance ?? 0) : set.weight,
             rest_interval: parseInt(exercise.restInterval) || 60,
           };
         })
@@ -1052,58 +1160,97 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between mb-2">
-                      <Label>Sets</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => addSet(exerciseIndex)}
-                      >
-                        <Plus className="mr-1 h-3 w-3" />
-                        Add Set
-                      </Button>
+                      <Label>{focus === "Cardio" ? "Session" : "Sets"}</Label>
+                      {focus !== "Cardio" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => addSet(exerciseIndex)}
+                        >
+                          <Plus className="mr-1 h-3 w-3" />
+                          Add Set
+                        </Button>
+                      )}
                     </div>
                     {exerciseSet.sets.map((set, setIndex) => (
                       <div
                         key={setIndex}
                         className="flex items-center gap-4 p-3 border rounded-md"
                       >
-                        <div className="font-medium w-12">Set {setIndex + 1}</div>
-                        <div className="flex-1 space-y-1">
-                          <Label className="text-xs">Weight (lbs)</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.5"
-                            value={set.weight.toString()}
-                            onChange={(e) =>
-                              updateSet(
-                                exerciseIndex,
-                                setIndex,
-                                "weight",
-                                parseFloat(e.target.value) || 0
-                              )
-                            }
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <Label className="text-xs">Reps</Label>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={set.reps.toString()}
-                            onChange={(e) =>
-                              updateSet(
-                                exerciseIndex,
-                                setIndex,
-                                "reps",
-                                parseInt(e.target.value) || 0
-                              )
-                            }
-                            placeholder="0"
-                          />
-                        </div>
+                        <div className="font-medium w-12">{focus === "Cardio" ? "" : `Set ${setIndex + 1}`}</div>
+                        {focus === "Cardio" ? (
+                          <>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Time</Label>
+                              <Input
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={5}
+                                value={getTimeDisplayValue(exerciseIndex, setIndex, set.time ?? 0)}
+                                onChange={(e) => handleTimeInputChange(exerciseIndex, setIndex, e.target.value)}
+                                onBlur={() => handleTimeInputBlur(exerciseIndex, setIndex)}
+                                placeholder="0:00"
+                              />
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Distance (miles)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={(set.distance ?? 0).toString()}
+                                onChange={(e) =>
+                                  updateSet(
+                                    exerciseIndex,
+                                    setIndex,
+                                    "distance",
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                placeholder="0"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Weight (lbs)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.5"
+                                value={set.weight.toString()}
+                                onChange={(e) =>
+                                  updateSet(
+                                    exerciseIndex,
+                                    setIndex,
+                                    "weight",
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                placeholder="0"
+                              />
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Reps</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                value={set.reps.toString()}
+                                onChange={(e) =>
+                                  updateSet(
+                                    exerciseIndex,
+                                    setIndex,
+                                    "reps",
+                                    parseInt(e.target.value) || 0
+                                  )
+                                }
+                                placeholder="0"
+                              />
+                            </div>
+                          </>
+                        )}
                         {exerciseSet.sets.length > 1 && (
                           <Button
                             type="button"
@@ -1118,26 +1265,28 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                     ))}
                   </div>
                   
-                  <div className="space-y-2 pt-4 border-t">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 text-muted-foreground" />
-                      <Label>Intervals</Label>
+                  {focus !== "Cardio" && (
+                    <div className="space-y-2 pt-4 border-t">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <Label>Intervals</Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Rest time between sets
+                      </p>
+                      <Select
+                        value={exerciseSet.restInterval || "60"}
+                        onChange={(e) => updateRestInterval(exerciseIndex, e.target.value)}
+                        className="w-full"
+                      >
+                        {restIntervalOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
                     </div>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Rest time between sets
-                    </p>
-                    <Select
-                      value={exerciseSet.restInterval || "60"}
-                      onChange={(e) => updateRestInterval(exerciseIndex, e.target.value)}
-                      className="w-full"
-                    >
-                      {restIntervalOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
+                  )}
                   <div className="mt-4 pt-4 border-t">
                     <Button
                       type="button"
