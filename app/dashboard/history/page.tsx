@@ -21,7 +21,7 @@ async function getWorkouts() {
         )
       `)
       .eq("user_id", userId)
-      .order("workout_date", { ascending: false });
+      .order("created_at", { ascending: false });
 
     return workouts as WorkoutWithExercises[] | null;
   } catch (error) {

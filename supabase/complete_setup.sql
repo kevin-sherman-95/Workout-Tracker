@@ -200,6 +200,14 @@ SELECT 'Dumbbell Flyes', id FROM muscle_groups WHERE name = 'Chest'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Machine Flies', id FROM muscle_groups WHERE name = 'Chest'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Dumbbell Incline Bench Press', id FROM muscle_groups WHERE name = 'Chest'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Push-ups', id FROM muscle_groups WHERE name = 'Chest'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
@@ -228,6 +236,10 @@ INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Skull Crushers', id FROM muscle_groups WHERE name = 'Triceps'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Rope Pull Downs', id FROM muscle_groups WHERE name = 'Triceps'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
 -- Shoulders exercises
 INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Overhead Press', id FROM muscle_groups WHERE name = 'Shoulders'
@@ -239,6 +251,10 @@ ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Front Raises', id FROM muscle_groups WHERE name = 'Shoulders'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Front + Lateral Raises', id FROM muscle_groups WHERE name = 'Shoulders'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
@@ -349,6 +365,14 @@ SELECT 'Leg Curls', id FROM muscle_groups WHERE name = 'Legs'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Hamstring Curls', id FROM muscle_groups WHERE name = 'Legs'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Single Leg Hamstring Curls', id FROM muscle_groups WHERE name = 'Legs'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Leg Extensions', id FROM muscle_groups WHERE name = 'Legs'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
@@ -366,19 +390,7 @@ ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 -- Core exercises
 INSERT INTO exercises (name, muscle_group_id)
-SELECT 'Plank', id FROM muscle_groups WHERE name = 'Core'
-ON CONFLICT (name, muscle_group_id) DO NOTHING;
-
-INSERT INTO exercises (name, muscle_group_id)
-SELECT 'Crunches', id FROM muscle_groups WHERE name = 'Core'
-ON CONFLICT (name, muscle_group_id) DO NOTHING;
-
-INSERT INTO exercises (name, muscle_group_id)
-SELECT 'Russian Twists', id FROM muscle_groups WHERE name = 'Core'
-ON CONFLICT (name, muscle_group_id) DO NOTHING;
-
-INSERT INTO exercises (name, muscle_group_id)
-SELECT 'Leg Raises', id FROM muscle_groups WHERE name = 'Core'
+SELECT 'Core', id FROM muscle_groups WHERE name = 'Core'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 -- Cardio exercises
@@ -396,6 +408,10 @@ ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Swimming', id FROM muscle_groups WHERE name = 'Cardio'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Peloton', id FROM muscle_groups WHERE name = 'Cardio'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 -- ================================================

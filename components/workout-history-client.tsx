@@ -7,13 +7,21 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
-import { Pencil, Trash2, X, Filter } from "lucide-react";
+import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import type { WorkoutWithExercises, Exercise, WorkoutFocus } from "@/lib/types";
 
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
 const parseLocalDate = (dateString: string): Date => {
   const [year, month, day] = dateString.split('-').map(Number);
   return new Date(year, month - 1, day); // month is 0-indexed
+};
+
+// Format seconds as MM:SS
+const formatTime = (seconds: number): string => {
+  if (seconds === 0) return "0:00";
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}:${secs.toString().padStart(2, "0")}`;
 };
 
 interface WorkoutHistoryClientProps {
@@ -27,6 +35,19 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
   const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [focusFilter, setFocusFilter] = useState<string>("all");
+  const [expandedWorkouts, setExpandedWorkouts] = useState<Set<string>>(new Set());
+
+  const toggleWorkoutExpanded = (workoutId: string) => {
+    setExpandedWorkouts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(workoutId)) {
+        newSet.delete(workoutId);
+      } else {
+        newSet.add(workoutId);
+      }
+      return newSet;
+    });
+  };
 
   const loadWorkoutsFromLocalStorage = useCallback(async () => {
     // Load mock workouts from localStorage
@@ -138,9 +159,9 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
       };
     });
 
-    // Sort by date descending
+    // Sort by created_at descending (most recently inputted first)
     workoutsWithExercises.sort((a, b) => 
-      parseLocalDate(b.workout_date).getTime() - parseLocalDate(a.workout_date).getTime()
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
     setWorkouts(workoutsWithExercises);
@@ -403,6 +424,7 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
 
       <div className="space-y-4">
         {displayedWorkouts.map((workout) => {
+          const isCardioWorkout = workout.focus === "Cardio";
           const exercisesByExerciseId = workout.workout_exercises.reduce(
             (acc, we) => {
               if (!we.exercise) return acc;
@@ -430,20 +452,30 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
           );
 
           const isConfirmingDelete = deletingWorkoutId === workout.id;
+          const isExpanded = expandedWorkouts.has(workout.id);
           
           return (
             <Card key={workout.id}>
-              <CardHeader>
+              <CardHeader className="cursor-pointer" onClick={() => toggleWorkoutExpanded(workout.id)}>
                 <div className="flex items-center justify-between">
-                  <Link href={`/dashboard/log/edit/${workout.id}`} className="group">
-                    <CardTitle className="group-hover:text-primary transition-colors cursor-pointer">
-                      {workout.focus}
-                    </CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1 group-hover:text-muted-foreground/80">
-                      {format(parseLocalDate(workout.workout_date), "EEEE, MMMM d, yyyy")}
-                    </p>
-                  </Link>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="text-muted-foreground">
+                      {isExpanded ? (
+                        <ChevronUp className="h-5 w-5" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div>
+                      <CardTitle>
+                        {workout.focus}
+                      </CardTitle>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {format(parseLocalDate(workout.workout_date), "EEEE, MMMM d, yyyy")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                     {isConfirmingDelete ? (
                       <>
                         <span className="text-sm text-muted-foreground mr-2">Delete?</span>
@@ -485,24 +517,72 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
                   </div>
                 </div>
               </CardHeader>
+              {isExpanded && (
               <CardContent className="space-y-4">
-                {Object.values(exercisesByExerciseId).map(({ exercise, sets }) => (
-                  <div key={exercise.id} className="border-l-2 border-primary pl-4">
-                    <h4 className="font-semibold mb-2">{exercise.name}</h4>
-                    <div className="space-y-1">
-                      {sets
-                        .sort((a, b) => a.set_number - b.set_number)
-                        .map((set) => (
-                          <div
-                            key={set.set_number}
-                            className="text-sm text-muted-foreground"
-                          >
-                            Set {set.set_number}: {set.reps} reps × {set.weight} lbs
-                          </div>
-                        ))}
+                {Object.values(exercisesByExerciseId).map(({ exercise, sets }) => {
+                  const isCoreExercise = exercise.name === "Core";
+                  const isPullups = exercise.name === "Pull-ups";
+                  // Check if this is a Peloton exercise to show output instead of distance
+                  const isPeloton = exercise.name === "Peloton";
+                  
+                  return (
+                    <div key={exercise.id} className="border-l-2 border-primary pl-4">
+                      <h4 className="font-semibold mb-2">{exercise.name}</h4>
+                      <div className="space-y-1">
+                        {sets
+                          .sort((a, b) => a.set_number - b.set_number)
+                          .map((set) => {
+                            // For cardio workouts: reps stores time (seconds), weight stores distance
+                            // For Core exercises: reps stores time (seconds), weight is 0
+                            if (isCardioWorkout) {
+                              const timeDisplay = formatTime(set.reps);
+                              const distanceDisplay = set.weight > 0 
+                                ? (isPeloton ? `${set.weight} kJ output` : `${set.weight} miles`)
+                                : null;
+                              return (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  {timeDisplay} minutes{distanceDisplay ? ` • ${distanceDisplay}` : ""}
+                                </div>
+                              );
+                            } else if (isCoreExercise) {
+                              // Core exercises store time in reps field
+                              const timeDisplay = formatTime(set.reps);
+                              return (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  {timeDisplay} minutes
+                                </div>
+                              );
+                            } else if (isPullups) {
+                              // Pull-ups only show reps (bodyweight exercise)
+                              return (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  Set {set.set_number}: {set.reps} reps
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  Set {set.set_number}: {set.reps} reps × {set.weight} lbs
+                                </div>
+                              );
+                            }
+                          })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {workout.notes && (
                   <div className="pt-4 border-t">
                     <p className="text-sm text-muted-foreground">
@@ -511,6 +591,7 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
                   </div>
                 )}
               </CardContent>
+              )}
             </Card>
           );
         })}
