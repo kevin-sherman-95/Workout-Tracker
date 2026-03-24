@@ -53,6 +53,8 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [savingExercise, setSavingExercise] = useState<number | null>(null);
   const [currentWorkoutId, setCurrentWorkoutId] = useState<string | undefined>(workoutId);
   const [collapsedExercises, setCollapsedExercises] = useState<Set<number>>(new Set());
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
 
   // Keep ref in sync with state for use in handleSubmit
   useEffect(() => {
@@ -388,6 +390,11 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   // Load exercises based on focus
   useEffect(() => {
     const loadExercises = async () => {
+      const capturedFocus = focus;
+      const applyExercisesIfCurrent = (sortedExercises: Exercise[]) => {
+        if (capturedFocus !== focusRef.current) return;
+        setExercises(sortedExercises);
+      };
       const client = createClient();
       const isMockMode = isInMockMode();
       
@@ -402,10 +409,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       if (isMockMode) {
         const mockExercises = getMockExercises(focus);
         const sortedExercises = sortExercisesByUsage(mockExercises, usageMap);
-        setExercises(sortedExercises);
+        applyExercisesIfCurrent(sortedExercises);
         
         // Store mock exercises in localStorage
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && capturedFocus === focusRef.current) {
           const existingExercises = JSON.parse(localStorage.getItem('mock-exercises') || '[]');
           const existingIds = new Set(existingExercises.map((e: any) => e.id));
           const newExercises = mockExercises.filter((e: any) => !existingIds.has(e.id));
@@ -421,7 +428,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         // Use mock exercises for "Other" focus
         const mockExercises = getMockExercises(focus);
         const sortedExercises = sortExercisesByUsage(mockExercises, usageMap);
-        setExercises(sortedExercises);
+        applyExercisesIfCurrent(sortedExercises);
         return;
       }
 
@@ -441,18 +448,18 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
 
           const exercisesToUse = exerciseData && exerciseData.length > 0 ? exerciseData : getMockExercises(focus);
           const sortedExercises = sortExercisesByUsage(exercisesToUse, usageMap);
-          setExercises(sortedExercises);
+          applyExercisesIfCurrent(sortedExercises);
         } else {
           // Fallback to mock exercises if no data returned
           const mockExercises = getMockExercises(focus);
           const sortedExercises = sortExercisesByUsage(mockExercises, usageMap);
-          setExercises(sortedExercises);
+          applyExercisesIfCurrent(sortedExercises);
         }
       } catch (error) {
         // If Supabase query fails, use mock exercises for testing
         const mockExercises = getMockExercises(focus);
         const sortedExercises = sortExercisesByUsage(mockExercises, usageMap);
-        setExercises(sortedExercises);
+        applyExercisesIfCurrent(sortedExercises);
       }
     };
 
@@ -502,7 +509,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         try {
           const { data } = await client
             .from("workout_exercises")
-            .select("*")
+            .select("*, exercise:exercises(name)")
             .eq("workout_id", workoutId);
           workoutExercises = data || [];
         } catch {
@@ -519,8 +526,16 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         // For cardio workouts and Abs, weight stores distance and reps stores time
         const isCardioWorkout = (workout.focus as WorkoutFocus) === "Cardio";
         const exercisesByExerciseId = workoutExercises.reduce((acc, we) => {
-          // Check if this is an Abs exercise (stored in exercise_name for mock mode, or weight=0 for time-based)
-          const isCoreExercise = we.exercise_name === "Core" || (we.weight === 0 && we.reps > 0 && !isCardioWorkout);
+          // Must match per-exercise save logic (saveExercise): only "Core" uses time→reps column mapping.
+          // Do not treat weight===0 as Core — bodyweight exercises (e.g. Pull-ups) store reps in `reps`.
+          const exerciseName = (
+            we.exercise_name ??
+            (we.exercise && typeof we.exercise === "object" && "name" in we.exercise
+              ? (we.exercise as { name?: string }).name
+              : undefined) ??
+            ""
+          ).trim();
+          const isCoreExercise = exerciseName === "Core";
           if (!acc[we.exercise_id]) {
             acc[we.exercise_id] = {
               exerciseId: we.exercise_id,
@@ -549,12 +564,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     loadWorkout();
   }, [workoutId]);
 
-  // Update selected exercises when exercises list becomes available
+  // Update selected exercises when exercises list becomes available (new workouts only — never clobber loaded edit data)
   useEffect(() => {
+    if (workoutId) return;
     if (exercises.length > 0) {
       setSelectedExercises((prev) =>
         prev.map((exercise) => {
-          // If the exercise has no exerciseId or an invalid one, set it to the first available
           if (!exercise.exerciseId || !exercises.find((e) => e.id === exercise.exerciseId)) {
             return { ...exercise, exerciseId: exercises[0].id };
           }
@@ -562,7 +577,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         })
       );
     }
-  }, [exercises]);
+  }, [exercises, workoutId]);
 
   const addExercise = () => {
     // Always add an exercise, even if list is empty (will show "No exercises available")
@@ -896,15 +911,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    console.log('🚀 FORM SUBMIT STARTED');
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     // Use the ref to ensure we have the latest value
     const exercisesToSave = selectedExercisesRef.current;
-    console.log('📦 Exercises to save:', exercisesToSave);
-    console.log('📦 Exercises count:', exercisesToSave.length);
 
     try {
       const client = createClient();
@@ -1024,12 +1036,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       // Create workout exercises
       // For cardio and Abs, we store time in reps field. For cardio, we also store distance in weight field
       const isCardioWorkout = focus === "Cardio";
-      console.log('💪 Creating workout exercises...');
       const workoutExercises = exercisesToSave.flatMap((exercise, exerciseIndex) => {
         const exerciseName = exercises.find(e => e.id === exercise.exerciseId)?.name;
         const isCoreExercise = exerciseName === "Core";
         return exercise.sets.map((set, setIndex) => {
-          console.log(`  Set ${setIndex + 1}: ${isCardioWorkout || isCoreExercise ? `time=${set.time}${isCardioWorkout ? `, distance=${set.distance}` : ''}` : `weight=${set.weight}, reps=${set.reps}`}`);
           return {
             workout_id: workoutIdToUse,
             exercise_id: exercise.exerciseId,
@@ -1041,14 +1051,8 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         });
       });
 
-      console.log('💾 Total workout exercises to save:', workoutExercises.length);
-      console.log('💾 Workout exercises data:', workoutExercises);
-
       if (workoutExercises.length > 0) {
-        console.log('🔍 isMockMode:', isMockMode);
-        console.log('🔍 workoutIdToUse:', workoutIdToUse);
         if (isMockMode) {
-          console.log('📝 Using localStorage (mock mode)');
           const mockWorkoutExercises = typeof window !== 'undefined'
             ? JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]')
             : [];
@@ -1063,34 +1067,27 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             };
           });
           mockWorkoutExercises.push(...newExercises);
-          console.log('✅ Saving to localStorage:', newExercises);
           if (typeof window !== 'undefined') {
             localStorage.setItem('mock-workout-exercises', JSON.stringify(mockWorkoutExercises));
-            console.log('✅ SAVED! localStorage now has', mockWorkoutExercises.length, 'total exercises');
           }
         } else {
-          console.log('📝 Using Supabase (real mode)');
           const { error: exercisesError } = await client
             .from("workout_exercises")
             .insert(workoutExercises);
 
           if (exercisesError) {
-            console.error('❌ Supabase save error:', exercisesError);
+            console.error("Supabase save error:", exercisesError);
             throw exercisesError;
           }
-          console.log('✅ Saved to Supabase successfully');
         }
         
         // Update usage counts for all exercises in the workout (only if we have a user ID)
         if (userId) {
-          console.log('📊 Updating exercise usage counts...');
           const uniqueExerciseIds = [...new Set(exercisesToSave.map(e => e.exerciseId))];
           for (const exerciseId of uniqueExerciseIds) {
             await updateExerciseUsage(client, userId, exerciseId, isMockMode);
           }
         }
-      } else {
-        console.warn('⚠️ No workout exercises to save (length is 0)');
       }
 
       // Dispatch event to update dashboard stats
@@ -1098,14 +1095,11 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         window.dispatchEvent(new Event('workoutUpdated'));
       }
 
-      console.log('🎉 WORKOUT SAVED SUCCESSFULLY!');
-      console.log('🔄 Redirecting to history page...');
-      
       // Success - redirect to history to see the saved workout
       router.push("/dashboard/history");
       router.refresh();
     } catch (err: any) {
-      console.error('❌ SAVE FAILED:', err);
+      console.error("Save workout failed:", err);
       setError(err.message || "Failed to save workout");
       setLoading(false);
     }
