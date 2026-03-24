@@ -37,16 +37,18 @@ export async function getSupabaseWithUser() {
   };
 
   // Return mock client if Supabase is not configured or URL is invalid
-  if (!isValidUrl(supabaseUrl) || !supabaseServiceKey || supabaseUrl!.includes('placeholder') || supabaseUrl!.includes('your-project')) {
+  const isMockMode = !isValidUrl(supabaseUrl) || !supabaseServiceKey || supabaseUrl!.includes('placeholder') || supabaseUrl!.includes('your-project');
+  if (isMockMode) {
     return {
       supabase: createMockSupabaseClient(),
       userId: userId || 'mock-user',
+      isMockMode: true,
     };
   }
 
   const supabase = createSupabaseClient(supabaseUrl!, supabaseServiceKey);
 
-  return { supabase, userId };
+  return { supabase, userId, isMockMode: false };
 }
 
 /**

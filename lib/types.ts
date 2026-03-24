@@ -7,6 +7,8 @@ export interface Exercise {
   id: string;
   name: string;
   muscle_group_id: string;
+  /** Present when exercises are loaded with a muscle_groups join */
+  muscle_group?: MuscleGroup;
 }
 
 export interface Workout {

@@ -524,6 +524,7 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
                   const isPullups = exercise.name === "Pull-ups";
                   // Check if this is a Peloton exercise to show output instead of distance
                   const isPeloton = exercise.name === "Peloton";
+                  const isSwimming = exercise.name === "Swimming";
                   
                   return (
                     <div key={exercise.id} className="border-l-2 border-primary pl-4">
@@ -533,7 +534,28 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
                           .sort((a, b) => a.set_number - b.set_number)
                           .map((set) => {
                             // For cardio workouts: reps stores time (seconds), weight stores distance
+                            // Swimming: reps = interval (seconds), weight = distance (yd), rest_interval = set count
                             // For Core exercises: reps stores time (seconds), weight is 0
+                            if (isCardioWorkout && isSwimming) {
+                              const setCount =
+                                set.rest_interval != null && set.rest_interval > 0
+                                  ? `${set.rest_interval} sets`
+                                  : null;
+                              const distYd =
+                                set.weight > 0 ? `${Math.round(set.weight)} yd` : null;
+                              const intDisplay =
+                                set.reps > 0
+                                  ? `${formatTime(set.reps)} interval`
+                                  : null;
+                              return (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  {[setCount, distYd, intDisplay].filter(Boolean).join(" • ") || "—"}
+                                </div>
+                              );
+                            }
                             if (isCardioWorkout) {
                               const timeDisplay = formatTime(set.reps);
                               const distanceDisplay = set.weight > 0 

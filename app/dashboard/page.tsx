@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { format } from "date-fns";
 import { WorkoutCalendar } from "@/components/workout-calendar";
 import { DashboardStats } from "@/components/dashboard-stats";
+import { DbStatusBanner } from "@/components/db-status-banner";
 
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
 const parseLocalDate = (dateString: string): Date => {
@@ -17,12 +18,13 @@ export default async function DashboardPage() {
   // Get recent workouts (will return empty if Supabase not configured)
   let workouts: any[] | null = null;
   let totalWorkouts = 0;
-  
   let allWorkouts: any[] | null = null;
-  
+  let isMockMode = false;
+
   try {
-    const { supabase, userId } = await getSupabaseWithUser();
-    
+    const { supabase, userId, isMockMode: mock } = await getSupabaseWithUser();
+    isMockMode = mock;
+
     // Only fetch workouts if we have a valid user
     if (userId) {
       const workoutsResult = await supabase
@@ -56,6 +58,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <DbStatusBanner isMockMode={isMockMode} />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>

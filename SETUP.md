@@ -37,11 +37,13 @@ AUTH0_DOMAIN='YOUR_DOMAIN.auth0.com'
 AUTH0_CLIENT_ID='YOUR_CLIENT_ID'
 AUTH0_CLIENT_SECRET='YOUR_CLIENT_SECRET'
 
-# Supabase Configuration
+# Supabase Configuration (all three required for data to load from Supabase)
 NEXT_PUBLIC_SUPABASE_URL='https://your-project.supabase.co'
 NEXT_PUBLIC_SUPABASE_ANON_KEY='your-anon-key-here'
 SUPABASE_SERVICE_ROLE_KEY='your-service-role-key'
 ```
+
+**Important:** The server needs `SUPABASE_SERVICE_ROLE_KEY` to read/write workouts. If it's missing, the app falls back to "mock" mode and no data is loaded from Supabase. In production (e.g. Vercel), add all variables in Project Settings → Environment Variables.
 
 **Generate AUTH0_SECRET:**
 ```bash
@@ -75,6 +77,18 @@ Visit [http://localhost:3000](http://localhost:3000)
    - All Supabase variables
 4. Auth0 Application Settings are already updated with production URLs (from step 2)
 5. Deploy!
+
+## Troubleshooting: "All my data is missing"
+
+Data can appear empty for a few reasons:
+
+1. **Supabase not configured** – If `NEXT_PUBLIC_SUPABASE_URL` and keys are missing or still placeholder values, the app runs in "mock" mode: the server can’t store data, but the **client** stores workouts in your browser’s **localStorage**. So:
+   - Log a workout first; then Dashboard, History, and Progress will show that data (from localStorage).
+   - Data is per-browser and per-device; clearing site data or using another browser will show empty again until you configure Supabase.
+
+2. **Not signed in** – Workouts are tied to your Auth0 user. If you’re not logged in (or the session isn’t loading), the server won’t return any workouts.
+
+3. **Supabase configured but empty** – New project, wrong user ID, or RLS can result in no rows. Ensure migrations and seed have been run and that you’re using the same Auth0 user that created the data.
 
 ## Features Implemented
 
