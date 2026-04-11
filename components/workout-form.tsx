@@ -332,6 +332,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         "Rope Curls",
         "21 Curls",
         "Hammer 21 Curls",
+        "Dumbbell Preacher Curls",
         "Core",
       ],
       "Legs": [
@@ -1654,6 +1655,46 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                               />
                             </div>
                           </>
+                        ) : focus === "Cardio" && exercise?.name === "Peloton" ? (
+                          <>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Time</Label>
+                              <Select
+                                value={(set.time ?? 0).toString()}
+                                onChange={(e) =>
+                                  updateSet(
+                                    exerciseIndex,
+                                    setIndex,
+                                    "time",
+                                    parseInt(e.target.value) || 0
+                                  )
+                                }
+                              >
+                                <option value="0">Select time</option>
+                                <option value="1200">20 mins</option>
+                                <option value="1800">30 mins</option>
+                                <option value="2700">45 mins</option>
+                              </Select>
+                            </div>
+                            <div className="flex-1 space-y-1">
+                              <Label className="text-xs">Output (kJ)</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={(set.distance ?? 0).toString()}
+                                onChange={(e) =>
+                                  updateSet(
+                                    exerciseIndex,
+                                    setIndex,
+                                    "distance",
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                placeholder="0"
+                              />
+                            </div>
+                          </>
                         ) : focus === "Cardio" ? (
                           <>
                             <div className="flex-1 space-y-1">
@@ -1669,11 +1710,11 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                               />
                             </div>
                             <div className="flex-1 space-y-1">
-                              <Label className="text-xs">{exercise?.name === "Peloton" ? "Output (kJ)" : "Distance (miles)"}</Label>
+                              <Label className="text-xs">Distance (miles)</Label>
                               <Input
                                 type="number"
                                 min="0"
-                                step={exercise?.name === "Peloton" ? "1" : "0.1"}
+                                step="0.1"
                                 value={(set.distance ?? 0).toString()}
                                 onChange={(e) =>
                                   updateSet(
