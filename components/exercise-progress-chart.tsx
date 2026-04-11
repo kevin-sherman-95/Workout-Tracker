@@ -20,10 +20,51 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
+import { useRouter } from "next/navigation";
 import { format, startOfMonth, startOfYear } from "date-fns";
 import type { WorkoutWithExercises, WorkoutFocus } from "@/lib/types";
 
 const REPS_KEY_PREFIX = "reps__";
+const WID_PREFIX = "wid__";
+const EID_PREFIX = "eid__";
+
+function widKey(exerciseName: string): string {
+  return `${WID_PREFIX}${exerciseName}`;
+}
+
+function eidKey(exerciseName: string): string {
+  return `${EID_PREFIX}${exerciseName}`;
+}
+
+/** Workout that contributed the plotted max weight (and reps at that weight) for this day. */
+function pickContributingWorkout(
+  dateWorkouts: WorkoutWithExercises[],
+  exerciseName: string,
+  maxW: number,
+  maxR: number
+): { workoutId: string; exerciseId: string } | null {
+  type Cand = { workoutId: string; exerciseId: string; created_at: string };
+  const exact: Cand[] = [];
+  const weightOnly: Cand[] = [];
+  for (const workout of dateWorkouts) {
+    for (const we of workout.workout_exercises) {
+      if (!we.exercise || we.exercise.name.trim() !== exerciseName) continue;
+      const nw = Number(we.weight);
+      if (Number.isNaN(nw) || nw !== maxW) continue;
+      const cand: Cand = {
+        workoutId: workout.id,
+        exerciseId: we.exercise.id,
+        created_at: workout.created_at ?? workout.workout_date,
+      };
+      if (we.reps === maxR) exact.push(cand);
+      weightOnly.push(cand);
+    }
+  }
+  const pool = exact.length > 0 ? exact : weightOnly;
+  if (pool.length === 0) return null;
+  pool.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return { workoutId: pool[0].workoutId, exerciseId: pool[0].exerciseId };
+}
 
 interface ExerciseDataPoint {
   date: string;
@@ -73,6 +114,7 @@ function SingleExerciseTooltipCard({
           </div>
         ) : null}
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">Click the dot to open this workout</p>
     </div>
   );
 }
@@ -95,6 +137,8 @@ function LineExerciseDot({
   strokeColor: string;
   setDotHover: Dispatch<SetStateAction<DotHoverState | null>>;
 }) {
+  const router = useRouter();
+
   if (cx == null || cy == null || !payload) return null;
   if (typeof value !== "number" || Number.isNaN(value)) return null;
 
@@ -106,6 +150,18 @@ function LineExerciseDot({
     prev.exerciseName === exerciseName &&
     prev.dateLabel === dateLabel;
 
+  const goToWorkout = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const wid = payload[widKey(exerciseName)];
+    const eid = payload[eidKey(exerciseName)];
+    if (typeof wid === "string" && typeof eid === "string" && wid && eid) {
+      router.push(
+        `/dashboard/history?workout=${encodeURIComponent(wid)}&exercise=${encodeURIComponent(eid)}`
+      );
+    }
+  };
+
   return (
     <g>
       <circle
@@ -114,6 +170,7 @@ function LineExerciseDot({
         r={16}
         fill="transparent"
         style={{ cursor: "pointer" }}
+        onClick={goToWorkout}
         onMouseEnter={(e) =>
           setDotHover({
             dateLabel,
@@ -399,12 +456,25 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
         dateValue,
       };
 
-      // Add max weight and max reps at that weight for each selected exercise
+      // Add max weight, reps at that weight, and contributing workout for each selected exercise
       selectedExercises.forEach((exerciseName) => {
         const w = exerciseMaxWeights[exerciseName];
         dataPoint[exerciseName] = w;
         dataPoint[repsFieldKey(exerciseName)] =
           w !== undefined ? exerciseRepsAtMaxWeight[exerciseName] : undefined;
+        if (w !== undefined) {
+          const maxR = exerciseRepsAtMaxWeight[exerciseName] ?? 0;
+          const picked = pickContributingWorkout(
+            dateWorkouts,
+            exerciseName,
+            w,
+            maxR
+          );
+          if (picked) {
+            dataPoint[widKey(exerciseName)] = picked.workoutId;
+            dataPoint[eidKey(exerciseName)] = picked.exerciseId;
+          }
+        }
       });
 
       dataPoints.push(dataPoint);

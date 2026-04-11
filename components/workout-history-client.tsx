@@ -27,9 +27,15 @@ const formatTime = (seconds: number): string => {
 interface WorkoutHistoryClientProps {
   serverWorkouts: WorkoutWithExercises[] | null;
   selectedWorkoutId?: string;
+  /** When opening from progress chart, scroll to this exercise block */
+  highlightExerciseId?: string;
 }
 
-export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: WorkoutHistoryClientProps) {
+export function WorkoutHistoryClient({
+  serverWorkouts,
+  selectedWorkoutId,
+  highlightExerciseId,
+}: WorkoutHistoryClientProps) {
   const [workouts, setWorkouts] = useState<WorkoutWithExercises[] | null>(serverWorkouts);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null);
@@ -48,6 +54,19 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
       return newSet;
     });
   };
+
+  useEffect(() => {
+    if (!selectedWorkoutId || !highlightExerciseId) return;
+    setExpandedWorkouts((prev) => new Set(prev).add(selectedWorkoutId));
+    const elId = `history-exercise-${highlightExerciseId}`;
+    const t = window.setTimeout(() => {
+      document.getElementById(elId)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 150);
+    return () => window.clearTimeout(t);
+  }, [selectedWorkoutId, highlightExerciseId]);
 
   const loadWorkoutsFromLocalStorage = useCallback(async () => {
     // Load mock workouts from localStorage
@@ -257,13 +276,12 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
     "Other"
   ];
 
-  // Filter by selected workout if provided, then by focus filter
+  // Filter by selected workout if provided, then by focus filter (only when browsing all)
   let displayedWorkouts = selectedWorkoutId
     ? workouts?.filter((w) => w.id === selectedWorkoutId) || []
     : workouts || [];
-  
-  // Apply focus filter if not "all"
-  if (focusFilter !== "all") {
+
+  if (!selectedWorkoutId && focusFilter !== "all") {
     displayedWorkouts = displayedWorkouts.filter((w) => w.focus === focusFilter);
   }
 
@@ -439,6 +457,7 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
                 set_number: we.set_number,
                 reps: we.reps,
                 weight: we.weight,
+                rest_interval: we.rest_interval,
               });
               return acc;
             },
@@ -446,7 +465,12 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
               string,
               {
                 exercise: { id: string; name: string };
-                sets: Array<{ set_number: number; reps: number; weight: number }>;
+                sets: Array<{
+                  set_number: number;
+                  reps: number;
+                  weight: number;
+                  rest_interval?: number;
+                }>;
               }
             >
           );
@@ -526,8 +550,19 @@ export function WorkoutHistoryClient({ serverWorkouts, selectedWorkoutId }: Work
                   const isPeloton = exercise.name === "Peloton";
                   const isSwimming = exercise.name === "Swimming";
                   
+                  const isHighlighted =
+                    !!highlightExerciseId && highlightExerciseId === exercise.id;
+
                   return (
-                    <div key={exercise.id} className="border-l-2 border-primary pl-4">
+                    <div
+                      key={exercise.id}
+                      id={`history-exercise-${exercise.id}`}
+                      className={`border-l-2 border-primary pl-4 scroll-mt-24 rounded-r-md transition-shadow ${
+                        isHighlighted
+                          ? "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                          : ""
+                      }`}
+                    >
                       <h4 className="font-semibold mb-2">{exercise.name}</h4>
                       <div className="space-y-1">
                         {sets

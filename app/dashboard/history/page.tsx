@@ -33,15 +33,17 @@ async function getWorkouts() {
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: { workout?: string };
+  searchParams: { workout?: string; exercise?: string };
 }) {
   const workouts = await getWorkouts();
   const selectedWorkoutId = searchParams?.workout;
+  const highlightExerciseId = searchParams?.exercise;
 
   return (
-    <WorkoutHistoryClient 
-      serverWorkouts={workouts} 
+    <WorkoutHistoryClient
+      serverWorkouts={workouts}
       selectedWorkoutId={selectedWorkoutId}
+      highlightExerciseId={highlightExerciseId}
     />
   );
 }

@@ -27,6 +27,7 @@ export interface WorkoutExercise {
   set_number: number;
   reps: number;
   weight: number;
+  rest_interval?: number;
   exercise?: Exercise;
 }
 
