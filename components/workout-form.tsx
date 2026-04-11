@@ -10,8 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Check, Save, ChevronDown, Clock } from "lucide-react";
-import type { Exercise, WorkoutFocus } from "@/lib/types";
+import { Plus, Trash2, Check, Save, ChevronDown, Clock, TrendingUp, TrendingDown, Minus, Trophy, X, ArrowRight } from "lucide-react";
+import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
 
 interface ExerciseUsage {
   exercise_id: string;
@@ -67,6 +67,29 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [exercisesLoadedForFocus, setExercisesLoadedForFocus] = useState<WorkoutFocus | null>(null);
   const focusRef = useRef(focus);
   focusRef.current = focus;
+
+  // Post-save comparison state
+  interface WorkoutStats {
+    totalSets: number;
+    totalReps: number;
+    totalVolume: number;
+    totalTime: number;
+    totalDistance: number;
+    exerciseCount: number;
+    exerciseBreakdown: Array<{
+      name: string;
+      sets: number;
+      bestWeight: number;
+      bestReps: number;
+      totalVolume: number;
+      totalTime: number;
+      totalDistance: number;
+    }>;
+    date: string;
+  }
+  const [showComparison, setShowComparison] = useState(false);
+  const [currentStats, setCurrentStats] = useState<WorkoutStats | null>(null);
+  const [previousStats, setPreviousStats] = useState<WorkoutStats | null>(null);
 
   // Keep ref in sync with state for use in handleSubmit
   useEffect(() => {
@@ -980,6 +1003,146 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     }
   };
 
+  const computeWorkoutStats = (
+    workoutExercises: (WorkoutExercise & { exercise: Exercise })[],
+    workoutDate: string,
+    workoutFocus: string
+  ): WorkoutStats => {
+    const isCardio = workoutFocus === "Cardio";
+    const exerciseMap = new Map<string, {
+      name: string;
+      sets: number;
+      bestWeight: number;
+      bestReps: number;
+      totalVolume: number;
+      totalTime: number;
+      totalDistance: number;
+    }>();
+
+    let totalSets = 0;
+    let totalReps = 0;
+    let totalVolume = 0;
+    let totalTime = 0;
+    let totalDistance = 0;
+
+    for (const we of workoutExercises) {
+      const name = we.exercise?.name || "Unknown";
+      const isCoreExercise = name === "Core";
+      const isSwimming = name === "Swimming";
+
+      totalSets++;
+
+      if (isCardio || isCoreExercise) {
+        totalTime += we.reps;
+        if (isCardio) totalDistance += we.weight;
+      } else {
+        totalReps += we.reps;
+        totalVolume += we.reps * we.weight;
+      }
+
+      const existing = exerciseMap.get(name);
+      if (existing) {
+        existing.sets++;
+        if (isCardio || isCoreExercise) {
+          existing.totalTime += we.reps;
+          if (isCardio) existing.totalDistance += we.weight;
+        } else {
+          existing.bestWeight = Math.max(existing.bestWeight, we.weight);
+          existing.bestReps = Math.max(existing.bestReps, we.reps);
+          existing.totalVolume += we.reps * we.weight;
+        }
+      } else {
+        exerciseMap.set(name, {
+          name,
+          sets: 1,
+          bestWeight: isCardio || isCoreExercise ? 0 : we.weight,
+          bestReps: isCardio || isCoreExercise ? 0 : we.reps,
+          totalVolume: isCardio || isCoreExercise ? 0 : we.reps * we.weight,
+          totalTime: isCardio || isCoreExercise ? we.reps : 0,
+          totalDistance: isCardio ? we.weight : 0,
+        });
+      }
+    }
+
+    return {
+      totalSets,
+      totalReps,
+      totalVolume,
+      totalTime,
+      totalDistance,
+      exerciseCount: exerciseMap.size,
+      exerciseBreakdown: Array.from(exerciseMap.values()),
+      date: workoutDate,
+    };
+  };
+
+  const fetchPreviousWorkout = async (
+    currentWorkoutId: string,
+    focusType: string,
+    effectiveUserId: string,
+    isMockMode: boolean
+  ): Promise<WorkoutStats | null> => {
+    if (isMockMode) {
+      const mockWorkouts = JSON.parse(localStorage.getItem('mock-workouts') || '[]');
+      const mockExercises = JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]');
+      const sorted = mockWorkouts
+        .filter((w: any) => w.focus === focusType && w.user_id === effectiveUserId && w.id !== currentWorkoutId)
+        .sort((a: any, b: any) => new Date(b.workout_date).getTime() - new Date(a.workout_date).getTime());
+      if (sorted.length === 0) return null;
+      const prev = sorted[0];
+      const prevExercises = mockExercises
+        .filter((we: any) => we.workout_id === prev.id)
+        .map((we: any) => ({
+          ...we,
+          exercise: exercises.find(e => e.id === we.exercise_id) || { id: we.exercise_id, name: we.exercise_name || "Unknown", muscle_group_id: "" },
+        }));
+      return computeWorkoutStats(prevExercises, prev.workout_date, prev.focus);
+    }
+
+    const client = createClient();
+    const { data, error } = await client
+      .from("workouts")
+      .select("id, workout_date, focus, workout_exercises(id, workout_id, exercise_id, set_number, reps, weight, rest_interval, exercise:exercises(id, name, muscle_group_id))")
+      .eq("user_id", effectiveUserId)
+      .eq("focus", focusType)
+      .neq("id", currentWorkoutId)
+      .order("workout_date", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data) return null;
+
+    const exercisesData = (data.workout_exercises || []).map((we: any) => ({
+      ...we,
+      exercise: we.exercise,
+    }));
+
+    return computeWorkoutStats(exercisesData, data.workout_date, data.focus);
+  };
+
+  const buildCurrentStats = (
+    exercisesToSave: ExerciseSet[],
+    date: string,
+    workoutFocus: string
+  ): WorkoutStats => {
+    const isCardio = workoutFocus === "Cardio";
+    const fakeExercises: (WorkoutExercise & { exercise: Exercise })[] = exercisesToSave.flatMap((es) => {
+      const exercise = exercises.find(e => e.id === es.exerciseId);
+      const name = exercise?.name || "Unknown";
+      const isCoreExercise = name === "Core";
+      return es.sets.map((set, idx) => ({
+        id: "",
+        workout_id: "",
+        exercise_id: es.exerciseId,
+        set_number: idx + 1,
+        reps: isCardio || isCoreExercise ? (set.time ?? 0) : set.reps,
+        weight: isCardio ? (set.distance ?? 0) : isCoreExercise ? 0 : set.weight,
+        exercise: exercise || { id: es.exerciseId, name: "Unknown", muscle_group_id: "" },
+      }));
+    });
+    return computeWorkoutStats(fakeExercises, date, workoutFocus);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -1172,9 +1335,25 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         window.dispatchEvent(new Event('workoutUpdated'));
       }
 
-      // Success - redirect to history to see the saved workout
-      router.push("/dashboard/history");
-      router.refresh();
+      // Build stats for the workout we just saved
+      const saved = buildCurrentStats(exercisesToSave, workoutDate, focus);
+      setCurrentStats(saved);
+
+      // Fetch previous workout of same type for comparison
+      try {
+        const prev = await fetchPreviousWorkout(
+          workoutIdToUse!,
+          focus,
+          effectiveUserId,
+          isMockMode
+        );
+        setPreviousStats(prev);
+      } catch {
+        setPreviousStats(null);
+      }
+
+      setLoading(false);
+      setShowComparison(true);
     } catch (err: any) {
       console.error("Save workout failed:", err);
       setError(err.message || "Failed to save workout");
@@ -1662,7 +1841,211 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           {loading ? (workoutId ? "Updating..." : "Saving...") : (workoutId ? "Update Workout" : "Save Workout")}
         </Button>
       </div>
+
+      {showComparison && currentStats && (
+        <WorkoutComparisonOverlay
+          currentStats={currentStats}
+          previousStats={previousStats}
+          focus={focus}
+          formatTime={formatTimeDisplay}
+          onClose={() => {
+            setShowComparison(false);
+            router.push("/dashboard/history");
+            router.refresh();
+          }}
+        />
+      )}
     </form>
+  );
+}
+
+function StatDelta({ current, previous, unit, higherIsBetter = true, formatFn }: {
+  current: number;
+  previous: number;
+  unit?: string;
+  higherIsBetter?: boolean;
+  formatFn?: (v: number) => string;
+}) {
+  const diff = current - previous;
+  if (diff === 0) return <span className="text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> Same</span>;
+  const improved = higherIsBetter ? diff > 0 : diff < 0;
+  const display = formatFn ? formatFn(Math.abs(diff)) : Math.abs(diff).toLocaleString();
+  return (
+    <span className={`flex items-center gap-1 font-medium ${improved ? "text-green-500" : "text-orange-500"}`}>
+      {improved ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+      {diff > 0 ? "+" : "-"}{display}{unit ? ` ${unit}` : ""}
+    </span>
+  );
+}
+
+function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTime, onClose }: {
+  currentStats: NonNullable<ReturnType<typeof Object>>;
+  previousStats: NonNullable<ReturnType<typeof Object>> | null;
+  focus: string;
+  formatTime: (s: number) => string;
+  onClose: () => void;
+}) {
+  const curr = currentStats as any;
+  const prev = previousStats as any;
+  const isCardio = focus === "Cardio";
+
+  const formatDistance = (d: number) => d % 1 === 0 ? d.toString() : d.toFixed(1);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-card border rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="p-6 pb-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-green-500/15 flex items-center justify-center">
+                <Trophy className="h-5 w-5 text-green-500" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold">Great job!</h2>
+                <p className="text-sm text-muted-foreground">
+                  {prev
+                    ? `Here's how you did compared to your last ${focus} workout`
+                    : `Here's your ${focus} workout summary`}
+                </p>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" onClick={onClose} className="shrink-0">
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Overview Stats */}
+          <div className={`grid gap-3 ${isCardio ? "grid-cols-2" : "grid-cols-3"}`}>
+            {!isCardio && (
+              <div className="bg-muted/50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold">{curr.totalVolume.toLocaleString()}</p>
+                <p className="text-xs text-muted-foreground">Total Volume (lbs)</p>
+                {prev && (
+                  <div className="mt-1 text-xs">
+                    <StatDelta current={curr.totalVolume} previous={prev.totalVolume} unit="lbs" />
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="bg-muted/50 rounded-lg p-3 text-center">
+              <p className="text-2xl font-bold">{curr.totalSets}</p>
+              <p className="text-xs text-muted-foreground">Total Sets</p>
+              {prev && (
+                <div className="mt-1 text-xs">
+                  <StatDelta current={curr.totalSets} previous={prev.totalSets} />
+                </div>
+              )}
+            </div>
+            {isCardio ? (
+              <>
+                <div className="bg-muted/50 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold">{formatTime(curr.totalTime) || "0:00"}</p>
+                  <p className="text-xs text-muted-foreground">Total Time</p>
+                  {prev && (
+                    <div className="mt-1 text-xs">
+                      <StatDelta current={curr.totalTime} previous={prev.totalTime} formatFn={formatTime} />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="bg-muted/50 rounded-lg p-3 text-center">
+                <p className="text-2xl font-bold">{curr.totalReps}</p>
+                <p className="text-xs text-muted-foreground">Total Reps</p>
+                {prev && (
+                  <div className="mt-1 text-xs">
+                    <StatDelta current={curr.totalReps} previous={prev.totalReps} />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Per-exercise breakdown */}
+          {curr.exerciseBreakdown.length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wide">Exercise Breakdown</h3>
+              <div className="space-y-2">
+                {curr.exerciseBreakdown.map((ex: any, i: number) => {
+                  const prevEx = prev?.exerciseBreakdown?.find((p: any) => p.name === ex.name);
+                  const isCoreExercise = ex.name === "Core";
+                  return (
+                    <div key={i} className="bg-muted/30 rounded-lg p-3">
+                      <p className="font-medium text-sm mb-2">{ex.name}</p>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Sets: </span>
+                          <span className="font-medium">{ex.sets}</span>
+                          {prevEx && prevEx.sets !== ex.sets && (
+                            <span className={ex.sets > prevEx.sets ? " text-green-500" : " text-orange-500"}>
+                              {" "}{ex.sets > prevEx.sets ? "+" : ""}{ex.sets - prevEx.sets}
+                            </span>
+                          )}
+                        </div>
+                        {(isCardio || isCoreExercise) ? (
+                          <>
+                            <div>
+                              <span className="text-muted-foreground">Time: </span>
+                              <span className="font-medium">{formatTime(ex.totalTime) || "0:00"}</span>
+                            </div>
+                            {isCardio && (
+                              <div>
+                                <span className="text-muted-foreground">Dist: </span>
+                                <span className="font-medium">{formatDistance(ex.totalDistance)}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <span className="text-muted-foreground">Best: </span>
+                              <span className="font-medium">{ex.bestWeight} lbs x {ex.bestReps}</span>
+                              {prevEx && (ex.bestWeight !== prevEx.bestWeight) && (
+                                <span className={ex.bestWeight > prevEx.bestWeight ? " text-green-500" : " text-orange-500"}>
+                                  {" "}{ex.bestWeight > prevEx.bestWeight ? "\u2191" : "\u2193"}
+                                </span>
+                              )}
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Vol: </span>
+                              <span className="font-medium">{ex.totalVolume.toLocaleString()}</span>
+                              {prevEx && prevEx.totalVolume !== ex.totalVolume && (
+                                <span className={ex.totalVolume > prevEx.totalVolume ? " text-green-500" : " text-orange-500"}>
+                                  {" "}{ex.totalVolume > prevEx.totalVolume ? "+" : ""}{(ex.totalVolume - prevEx.totalVolume).toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {prev && (
+            <p className="text-xs text-muted-foreground text-center">
+              Compared to your {focus} workout on {new Date(prev.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </p>
+          )}
+
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              onClick={onClose}
+              className="flex-1 flex items-center justify-center gap-2"
+            >
+              View History
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
