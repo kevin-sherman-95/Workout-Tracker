@@ -64,6 +64,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [savingExercise, setSavingExercise] = useState<number | null>(null);
   const [currentWorkoutId, setCurrentWorkoutId] = useState<string | undefined>(workoutId);
   const [collapsedExercises, setCollapsedExercises] = useState<Set<number>>(new Set());
+  const [exercisesLoadedForFocus, setExercisesLoadedForFocus] = useState<WorkoutFocus | null>(null);
   const focusRef = useRef(focus);
   focusRef.current = focus;
 
@@ -427,6 +428,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       const applyExercisesIfCurrent = (sortedExercises: Exercise[]) => {
         if (capturedFocus !== focusRef.current) return;
         setExercises(sortedExercises);
+        setExercisesLoadedForFocus(capturedFocus);
       };
       const client = createClient();
       const isMockMode = isInMockMode();
@@ -1180,7 +1182,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     }
   };
 
-  if (isLoadingWorkout) {
+  if (isLoadingWorkout || (workoutId && exercisesLoadedForFocus !== focus)) {
     return (
       <div className="space-y-6">
         <Card>
