@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Check, Save, ChevronDown, Clock, TrendingUp, TrendingDown, Minus, Trophy, X, ArrowRight } from "lucide-react";
+import { Plus, Trash2, Check, Save, ChevronDown, Clock, TrendingUp, TrendingDown, Minus, Trophy, X, ArrowRight, Info } from "lucide-react";
 import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
 
 interface ExerciseUsage {
@@ -90,6 +90,84 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [showComparison, setShowComparison] = useState(false);
   const [currentStats, setCurrentStats] = useState<WorkoutStats | null>(null);
   const [previousStats, setPreviousStats] = useState<WorkoutStats | null>(null);
+
+  // Exercise history popup state
+  interface ExerciseHistoryEntry {
+    workout_date: string;
+    sets: Array<{ set_number: number; reps: number; weight: number; rest_interval?: number }>;
+  }
+  const [historyPopupExerciseId, setHistoryPopupExerciseId] = useState<string | null>(null);
+  const [exerciseHistory, setExerciseHistory] = useState<ExerciseHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const fetchExerciseHistory = async (exerciseId: string) => {
+    setHistoryLoading(true);
+    setExerciseHistory([]);
+    setHistoryPopupExerciseId(exerciseId);
+
+    const isMockMode = isInMockMode();
+    const effectiveUserId = userId || (isMockMode ? "mock-user-id" : null);
+
+    if (!effectiveUserId) {
+      setHistoryLoading(false);
+      return;
+    }
+
+    try {
+      if (isMockMode) {
+        const mockWorkouts: any[] = JSON.parse(localStorage.getItem("mock-workouts") || "[]");
+        const mockWEs: any[] = JSON.parse(localStorage.getItem("mock-workout-exercises") || "[]");
+        const relevantWEs = mockWEs.filter((we: any) => we.exercise_id === exerciseId);
+        const workoutIds = [...new Set(relevantWEs.map((we: any) => we.workout_id))];
+        const relevantWorkouts = mockWorkouts
+          .filter((w: any) => workoutIds.includes(w.id) && w.user_id === effectiveUserId)
+          .sort((a: any, b: any) => new Date(b.workout_date).getTime() - new Date(a.workout_date).getTime())
+          .slice(0, 5);
+
+        const entries: ExerciseHistoryEntry[] = relevantWorkouts.map((w: any) => ({
+          workout_date: w.workout_date,
+          sets: mockWEs
+            .filter((we: any) => we.workout_id === w.id && we.exercise_id === exerciseId)
+            .sort((a: any, b: any) => a.set_number - b.set_number)
+            .map((we: any) => ({ set_number: we.set_number, reps: we.reps, weight: we.weight, rest_interval: we.rest_interval })),
+        }));
+        setExerciseHistory(entries);
+      } else {
+        const client = createClient();
+        const { data } = await client
+          .from("workout_exercises")
+          .select("set_number, reps, weight, rest_interval, workout:workouts!inner(id, workout_date, user_id)")
+          .eq("exercise_id", exerciseId)
+          .eq("workout.user_id", effectiveUserId)
+          .order("set_number", { ascending: true });
+
+        if (data && data.length > 0) {
+          const byWorkout = new Map<string, { date: string; sets: ExerciseHistoryEntry["sets"] }>();
+          for (const row of data as any[]) {
+            const wId = row.workout.id;
+            if (!byWorkout.has(wId)) {
+              byWorkout.set(wId, { date: row.workout.workout_date, sets: [] });
+            }
+            byWorkout.get(wId)!.sets.push({
+              set_number: row.set_number,
+              reps: row.reps,
+              weight: row.weight,
+              rest_interval: row.rest_interval,
+            });
+          }
+          const entries = Array.from(byWorkout.values())
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .slice(0, 5)
+            .map((e) => ({ workout_date: e.date, sets: e.sets }));
+          setExerciseHistory(entries);
+        }
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   // Keep ref in sync with state for use in handleSubmit
   useEffect(() => {
@@ -1470,23 +1548,37 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                     </Button>
                     <div className="flex-1 space-y-2">
                       <Label>Exercise</Label>
-                      <Select
-                        value={exerciseSet.exerciseId || ""}
-                        onChange={(e) =>
-                          updateExercise(exerciseIndex, e.target.value)
-                        }
-                        className="w-full"
-                      >
-                        {exercises.length === 0 ? (
-                          <option value="">No exercises available</option>
-                        ) : (
-                          exercises.map((ex) => (
-                            <option key={ex.id} value={ex.id}>
-                              {ex.name}
-                            </option>
-                          ))
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={exerciseSet.exerciseId || ""}
+                          onChange={(e) =>
+                            updateExercise(exerciseIndex, e.target.value)
+                          }
+                          className="w-full"
+                        >
+                          {exercises.length === 0 ? (
+                            <option value="">No exercises available</option>
+                          ) : (
+                            exercises.map((ex) => (
+                              <option key={ex.id} value={ex.id}>
+                                {ex.name}
+                              </option>
+                            ))
+                          )}
+                        </Select>
+                        {exerciseSet.exerciseId && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 h-8 w-8"
+                            onClick={() => fetchExerciseHistory(exerciseSet.exerciseId)}
+                            title="View recent history"
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
                         )}
-                      </Select>
+                      </div>
                     </div>
                     <Button
                       type="button"
@@ -1895,6 +1987,73 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             router.refresh();
           }}
         />
+      )}
+
+      {historyPopupExerciseId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setHistoryPopupExerciseId(null)}
+        >
+          <div
+            className="bg-card border rounded-xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="font-semibold text-lg">
+                {exercises.find((e) => e.id === historyPopupExerciseId)?.name || "Exercise"} History
+              </h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setHistoryPopupExerciseId(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="p-4 space-y-4">
+              {historyLoading ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Loading...</p>
+              ) : exerciseHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">No previous workouts found for this exercise.</p>
+              ) : (
+                exerciseHistory.map((entry, i) => (
+                  <div key={i} className="space-y-2">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {new Date(entry.workout_date + "T00:00:00").toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                    <div className="bg-muted/30 rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border/50">
+                            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Set</th>
+                            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Weight (lbs)</th>
+                            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Reps</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {entry.sets.map((set, j) => (
+                            <tr key={j} className={j < entry.sets.length - 1 ? "border-b border-border/30" : ""}>
+                              <td className="py-1.5 px-3">{set.set_number}</td>
+                              <td className="py-1.5 px-3">{set.weight}</td>
+                              <td className="py-1.5 px-3">{set.reps}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </form>
   );
