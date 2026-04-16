@@ -53,6 +53,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     initialDate || new Date().toISOString().split("T")[0]
   );
   const [notes, setNotes] = useState("");
+  const [bodyWeight, setBodyWeight] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exerciseUsage, setExerciseUsage] = useState<Map<string, number>>(new Map());
   const [selectedExercises, setSelectedExercises] = useState<ExerciseSet[]>([]);
@@ -642,6 +643,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         setFocus(workout.focus as WorkoutFocus);
         setWorkoutDate(workout.workout_date);
         setNotes(workout.notes || "");
+        setBodyWeight(workout.body_weight != null ? workout.body_weight.toString() : "");
         setCurrentWorkoutId(workout.id);
 
         // Try to load workout exercises from Supabase first
@@ -884,12 +886,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           const mockWorkouts = typeof window !== 'undefined'
             ? JSON.parse(localStorage.getItem('mock-workouts') || '[]')
             : [];
+          const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
           const newWorkout = {
             id: `mock-${Date.now()}`,
             user_id: effectiveUserId,
             workout_date: workoutDate,
             focus,
             notes: notes || null,
+            body_weight: parsedWeight,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -900,6 +904,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           workoutIdToUse = newWorkout.id;
           setCurrentWorkoutId(newWorkout.id);
         } else {
+          const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
           const { data: workout, error: workoutError } = await client
             .from("workouts")
             .insert({
@@ -907,6 +912,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
               workout_date: workoutDate,
               focus,
               notes: notes || null,
+              body_weight: parsedWeight,
             })
             .select()
             .single();
@@ -924,11 +930,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             : [];
           const workoutIndex = mockWorkouts.findIndex((w: any) => w.id === workoutIdToUse);
           if (workoutIndex !== -1) {
+            const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
             mockWorkouts[workoutIndex] = {
               ...mockWorkouts[workoutIndex],
               workout_date: workoutDate,
               focus,
               notes: notes || null,
+              body_weight: parsedWeight,
               updated_at: new Date().toISOString(),
             };
             if (typeof window !== 'undefined') {
@@ -936,12 +944,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             }
           }
         } else {
+          const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
           const { error: workoutError } = await client
             .from("workouts")
             .update({
               workout_date: workoutDate,
               focus,
               notes: notes || null,
+              body_weight: parsedWeight,
             })
             .eq("id", workoutIdToUse);
           
@@ -1253,11 +1263,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             : [];
           const workoutIndex = mockWorkouts.findIndex((w: any) => w.id === workoutIdToUse);
           if (workoutIndex !== -1) {
+            const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
             mockWorkouts[workoutIndex] = {
               ...mockWorkouts[workoutIndex],
               workout_date: workoutDate,
               focus,
               notes: notes || null,
+              body_weight: parsedWeight,
               updated_at: new Date().toISOString(),
             };
             if (typeof window !== 'undefined') {
@@ -1276,12 +1288,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             localStorage.setItem('mock-workout-exercises', JSON.stringify(filtered));
           }
         } else {
+          const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
           const { error: workoutError } = await client
             .from("workouts")
             .update({
               workout_date: workoutDate,
               focus,
               notes: notes || null,
+              body_weight: parsedWeight,
             })
             .eq("id", workoutIdToUse);
           
@@ -1305,12 +1319,14 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           const mockWorkouts = typeof window !== 'undefined'
             ? JSON.parse(localStorage.getItem('mock-workouts') || '[]')
             : [];
+          const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
           const newWorkout = {
             id: `mock-${Date.now()}`,
             user_id: effectiveUserId,
             workout_date: workoutDate,
             focus,
             notes: notes || null,
+            body_weight: parsedWeight,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           };
@@ -1321,6 +1337,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           workoutIdToUse = newWorkout.id;
           setCurrentWorkoutId(newWorkout.id);
         } else {
+          const parsedWeight = bodyWeight ? parseFloat(bodyWeight) : null;
           const { data: workout, error: workoutError } = await client
             .from("workouts")
             .insert({
@@ -1328,6 +1345,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
               workout_date: workoutDate,
               focus,
               notes: notes || null,
+              body_weight: parsedWeight,
             })
             .select()
             .single();
@@ -1483,6 +1501,19 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                 </option>
               ))}
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bodyWeight">Weight (lbs)</Label>
+            <Input
+              id="bodyWeight"
+              type="number"
+              min="0"
+              step="0.1"
+              value={bodyWeight}
+              onChange={(e) => setBodyWeight(e.target.value)}
+              placeholder="Enter your body weight"
+            />
           </div>
 
           <div className="space-y-2">

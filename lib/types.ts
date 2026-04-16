@@ -17,6 +17,7 @@ export interface Workout {
   workout_date: string;
   focus: string;
   notes?: string;
+  body_weight?: number | null;
   created_at: string;
 }
 
