@@ -10,6 +10,28 @@ import { createClient } from "@/lib/supabase/client";
 import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import type { WorkoutWithExercises, Exercise, WorkoutFocus } from "@/lib/types";
 
+/** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
+function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
+  if (workout.focus !== "Cardio") {
+    return workout.focus;
+  }
+  const orderedUnique: string[] = [];
+  const seen = new Set<string>();
+  for (const we of workout.workout_exercises) {
+    const name = we.exercise?.name?.trim();
+    if (!name) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    orderedUnique.push(name);
+  }
+  if (orderedUnique.length === 0) {
+    return workout.focus;
+  }
+  const withoutCore = orderedUnique.filter((n) => n !== "Core");
+  const labelParts = withoutCore.length > 0 ? withoutCore : orderedUnique;
+  return `${workout.focus} - ${labelParts.join(", ")}`;
+}
+
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
 const parseLocalDate = (dateString: string): Date => {
   const [year, month, day] = dateString.split('-').map(Number);
@@ -492,7 +514,7 @@ export function WorkoutHistoryClient({
                     </div>
                     <div>
                       <CardTitle>
-                        {workout.focus}
+                        {getWorkoutHistoryCardTitle(workout)}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
                         {format(parseLocalDate(workout.workout_date), "EEEE, MMMM d, yyyy")}
