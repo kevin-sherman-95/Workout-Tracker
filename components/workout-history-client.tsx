@@ -625,12 +625,21 @@ export function WorkoutHistoryClient({
                               const distanceDisplay = set.weight > 0 
                                 ? (isPeloton ? `${set.weight} kJ output` : `${set.weight} miles`)
                                 : null;
+                              const isRunning = exercise.name === "Running";
+                              const pacePerMileDisplay =
+                                isRunning &&
+                                !isPeloton &&
+                                set.weight > 0 &&
+                                set.reps > 0
+                                  ? `${formatTime(Math.round(set.reps / set.weight))} / mi`
+                                  : null;
                               return (
                                 <div
                                   key={set.set_number}
                                   className="text-sm text-muted-foreground"
                                 >
                                   {timeDisplay} minutes{distanceDisplay ? ` • ${distanceDisplay}` : ""}
+                                  {pacePerMileDisplay ? ` • ${pacePerMileDisplay}` : ""}
                                 </div>
                               );
                             } else if (isCoreExercise) {
