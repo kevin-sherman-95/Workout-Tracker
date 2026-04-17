@@ -572,12 +572,19 @@ export function WorkoutHistoryClient({
                             // Swimming: reps = interval (seconds), weight = distance (yd), rest_interval = set count
                             // For Core exercises: reps stores time (seconds), weight is 0
                             if (isCardioWorkout && isSwimming) {
-                              const setCount =
+                              const swimSetCount =
                                 set.rest_interval != null && set.rest_interval > 0
-                                  ? `${set.rest_interval} sets`
-                                  : null;
+                                  ? set.rest_interval
+                                  : 0;
+                              const ydPerSet = set.weight > 0 ? Math.round(set.weight) : 0;
+                              const setCount =
+                                swimSetCount > 0 ? `${swimSetCount} sets` : null;
                               const distYd =
-                                set.weight > 0 ? `${Math.round(set.weight)} yd` : null;
+                                ydPerSet > 0 ? `${ydPerSet} yd` : null;
+                              const totalYards =
+                                swimSetCount > 0 && ydPerSet > 0
+                                  ? `${(swimSetCount * ydPerSet).toLocaleString()} yd total`
+                                  : null;
                               const intDisplay =
                                 set.reps > 0
                                   ? `${formatTime(set.reps)} interval`
@@ -587,7 +594,7 @@ export function WorkoutHistoryClient({
                                   key={set.set_number}
                                   className="text-sm text-muted-foreground"
                                 >
-                                  {[setCount, distYd, intDisplay].filter(Boolean).join(" • ") || "—"}
+                                  {[setCount, distYd, totalYards, intDisplay].filter(Boolean).join(" • ") || "—"}
                                 </div>
                               );
                             }
