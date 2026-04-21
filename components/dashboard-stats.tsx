@@ -12,36 +12,45 @@ const parseLocalDate = (dateString: string): Date => {
 
 interface DashboardStatsProps {
   serverWorkouts: any[] | null;
-  serverTotalWorkouts: number;
+  /** Count from server: workouts with workout_date in [Jan 1, today] (local calendar year). */
+  serverYtdWorkouts: number;
 }
 
-export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: DashboardStatsProps) {
-  const [totalWorkouts, setTotalWorkouts] = useState(0);
+export function DashboardStats({ serverWorkouts, serverYtdWorkouts }: DashboardStatsProps) {
+  const [ytdWorkouts, setYtdWorkouts] = useState(0);
   const [thisWeekWorkouts, setThisWeekWorkouts] = useState(0);
   const [thisMonthWorkouts, setThisMonthWorkouts] = useState(0);
 
+  /** YTD, calendar week (Mon–Sun, Mon start), and calendar month (1st–end) using local dates on workout_date. */
   const calculateStats = (workouts: any[]) => {
     const today = new Date();
     today.setHours(23, 59, 59, 999);
-    
-    // Calculate workouts this week (last 7 days, including today)
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    weekAgo.setHours(0, 0, 0, 0);
-    const thisWeekCount = workouts.filter((w: any) => {
-      const workoutDate = parseLocalDate(w.workout_date);
-      return workoutDate >= weekAgo && workoutDate <= today;
-    }).length;
-    
-    // Calculate workouts this month (from 1st of current month)
+
+    const ytdStart = new Date(today.getFullYear(), 0, 1);
+    ytdStart.setHours(0, 0, 0, 0);
+
+    const dow = today.getDay();
+    const daysFromMonday = dow === 0 ? 6 : dow - 1;
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - daysFromMonday);
+    weekStart.setHours(0, 0, 0, 0);
+
     const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
     monthStart.setHours(0, 0, 0, 0);
-    const thisMonthCount = workouts.filter((w: any) => {
+
+    let ytdCount = 0;
+    let thisWeekCount = 0;
+    let thisMonthCount = 0;
+    for (const w of workouts) {
+      if (!w?.workout_date) continue;
       const workoutDate = parseLocalDate(w.workout_date);
-      return workoutDate >= monthStart && workoutDate <= today;
-    }).length;
-    
-    return { thisWeekCount, thisMonthCount };
+      if (workoutDate > today) continue;
+      if (workoutDate >= ytdStart) ytdCount++;
+      if (workoutDate >= weekStart) thisWeekCount++;
+      if (workoutDate >= monthStart) thisMonthCount++;
+    }
+
+    return { ytdCount, thisWeekCount, thisMonthCount };
   };
 
   useEffect(() => {
@@ -64,16 +73,17 @@ export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: Dashboar
           ? mockWorkouts.filter((w: any) => w.user_id === mockUser.id)
           : mockWorkouts;
         
-        setTotalWorkouts(userWorkouts.length);
-        
-        const { thisWeekCount, thisMonthCount } = calculateStats(userWorkouts);
+        const { ytdCount, thisWeekCount, thisMonthCount } =
+          calculateStats(userWorkouts);
+        setYtdWorkouts(ytdCount);
         setThisWeekWorkouts(thisWeekCount);
         setThisMonthWorkouts(thisMonthCount);
       } else {
-        // Use server data
-        setTotalWorkouts(serverTotalWorkouts);
-        
-        const { thisWeekCount, thisMonthCount } = calculateStats(serverWorkouts || []);
+        // Use server YTD count; week/month from full workout list (same date rules)
+        setYtdWorkouts(serverYtdWorkouts);
+        const { thisWeekCount, thisMonthCount } = calculateStats(
+          serverWorkouts || []
+        );
         setThisWeekWorkouts(thisWeekCount);
         setThisMonthWorkouts(thisMonthCount);
       }
@@ -81,7 +91,7 @@ export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: Dashboar
     
     // Update stats immediately
     updateStats();
-  }, [serverWorkouts, serverTotalWorkouts]);
+  }, [serverWorkouts, serverYtdWorkouts]);
 
   // Listen for storage changes to update stats in real-time
   useEffect(() => {
@@ -101,9 +111,9 @@ export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: Dashboar
           ? mockWorkouts.filter((w: any) => w.user_id === mockUser.id)
           : mockWorkouts;
         
-        setTotalWorkouts(userWorkouts.length);
-        
-        const { thisWeekCount, thisMonthCount } = calculateStats(userWorkouts);
+        const { ytdCount, thisWeekCount, thisMonthCount } =
+          calculateStats(userWorkouts);
+        setYtdWorkouts(ytdCount);
         setThisWeekWorkouts(thisWeekCount);
         setThisMonthWorkouts(thisMonthCount);
       }
@@ -127,11 +137,11 @@ export function DashboardStats({ serverWorkouts, serverTotalWorkouts }: Dashboar
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Workouts</CardTitle>
+          <CardTitle className="text-sm font-medium">Total Workouts (YTD)</CardTitle>
           <Calendar className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className="text-2xl font-bold">{totalWorkouts}</div>
+          <div className="text-2xl font-bold">{ytdWorkouts}</div>
         </CardContent>
       </Card>
 
