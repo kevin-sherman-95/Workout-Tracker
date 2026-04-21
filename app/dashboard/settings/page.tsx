@@ -1,8 +1,16 @@
+import { Suspense } from "react";
 import { SettingsClient } from "./settings-client";
 
 export default function SettingsPage() {
-  // User data is fetched client-side in SettingsClient via useUser hook
-  return <SettingsClient user={null} />;
+  return (
+    <Suspense
+      fallback={
+        <p className="text-sm text-muted-foreground">Loading settings…</p>
+      }
+    >
+      <SettingsClient user={null} />
+    </Suspense>
+  );
 }
 
 

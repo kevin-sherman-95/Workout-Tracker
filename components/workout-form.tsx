@@ -41,6 +41,32 @@ interface WorkoutFormProps {
   userId?: string;
 }
 
+function formatRestIntervalSeconds(seconds: number): string {
+  if (seconds <= 0) return "";
+  if (seconds % 60 === 0 && seconds >= 60) {
+    const m = seconds / 60;
+    return m === 1 ? "1 min" : `${m} mins`;
+  }
+  return `${seconds}s`;
+}
+
+/** Matches workout history wording; omit for Swimming (rest_interval is set count). */
+function restLabelFromSets(
+  sets: Array<{ rest_interval?: number }>,
+  exerciseName: string
+): string | null {
+  if (exerciseName === "Swimming") return null;
+  const raw = sets
+    .map((s) => s.rest_interval)
+    .filter((r): r is number => typeof r === "number" && r > 0);
+  if (raw.length === 0) return null;
+  const uniq = [...new Set(raw)].sort((a, b) => a - b);
+  if (uniq.length === 1) {
+    return `Rest: ${formatRestIntervalSeconds(uniq[0])}`;
+  }
+  return `Rest: ${uniq.map(formatRestIntervalSeconds).join(" · ")}`;
+}
+
 export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: WorkoutFormProps) {
   const router = useRouter();
   const { user, isLoading: isUserLoading } = useUser();
@@ -2049,7 +2075,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
               ) : exerciseHistory.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No previous workouts found for this exercise.</p>
               ) : (
-                exerciseHistory.map((entry, i) => (
+                (() => {
+                  const historyExerciseName =
+                    exercises.find((e) => e.id === historyPopupExerciseId)?.name ?? "";
+                  return exerciseHistory.map((entry, i) => {
+                  const popupRestLabel = restLabelFromSets(entry.sets, historyExerciseName);
+                  return (
                   <div key={i} className="space-y-2">
                     <p className="text-sm font-medium text-muted-foreground">
                       {new Date(entry.workout_date + "T00:00:00").toLocaleDateString("en-US", {
@@ -2078,9 +2109,16 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                           ))}
                         </tbody>
                       </table>
+                      {popupRestLabel && (
+                        <p className="text-xs text-muted-foreground px-3 py-2 border-t border-border/30 bg-muted/20">
+                          {popupRestLabel}
+                        </p>
+                      )}
                     </div>
                   </div>
-                ))
+                  );
+                });
+                })()
               )}
             </div>
           </div>

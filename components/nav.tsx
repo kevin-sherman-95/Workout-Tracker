@@ -81,11 +81,15 @@ export function Nav({ userName, userPicture }: NavProps) {
           >
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+            <DropdownMenuItem
+              onClick={() => router.push("/dashboard/settings?tab=account")}
+            >
               <User className="h-4 w-4 mr-3" />
               Profile
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+            <DropdownMenuItem
+              onClick={() => router.push("/dashboard/settings?tab=preferences")}
+            >
               <Settings className="h-4 w-4 mr-3" />
               Settings
             </DropdownMenuItem>

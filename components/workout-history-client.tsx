@@ -46,6 +46,35 @@ const formatTime = (seconds: number): string => {
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 };
 
+/** Rest between sets, stored as seconds on each workout_exercise row. */
+function formatRestInterval(seconds: number): string {
+  if (seconds <= 0) return "";
+  if (seconds % 60 === 0 && seconds >= 60) {
+    const m = seconds / 60;
+    return m === 1 ? "1 min" : `${m} mins`;
+  }
+  return `${seconds}s`;
+}
+
+/**
+ * Human-readable rest between sets. For Swimming, `rest_interval` is set count — do not show as rest.
+ */
+function getRestBetweenSetsLabel(
+  sets: Array<{ rest_interval?: number }>,
+  isSwimming: boolean
+): string | null {
+  if (isSwimming) return null;
+  const raw = sets
+    .map((s) => s.rest_interval)
+    .filter((r): r is number => typeof r === "number" && r > 0);
+  if (raw.length === 0) return null;
+  const uniq = [...new Set(raw)].sort((a, b) => a - b);
+  if (uniq.length === 1) {
+    return `Rest: ${formatRestInterval(uniq[0])}`;
+  }
+  return `Rest: ${uniq.map(formatRestInterval).join(" · ")}`;
+}
+
 interface WorkoutHistoryClientProps {
   serverWorkouts: WorkoutWithExercises[] | null;
   selectedWorkoutId?: string;
@@ -575,6 +604,11 @@ export function WorkoutHistoryClient({
                   const isHighlighted =
                     !!highlightExerciseId && highlightExerciseId === exercise.id;
 
+                  const restBetweenSetsLabel = getRestBetweenSetsLabel(
+                    sets,
+                    isSwimming
+                  );
+
                   return (
                     <div
                       key={exercise.id}
@@ -675,6 +709,11 @@ export function WorkoutHistoryClient({
                             }
                           })}
                       </div>
+                      {restBetweenSetsLabel && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {restBetweenSetsLabel}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
