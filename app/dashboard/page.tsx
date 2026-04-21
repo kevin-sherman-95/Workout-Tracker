@@ -17,7 +17,7 @@ const parseLocalDate = (dateString: string): Date => {
 export default async function DashboardPage() {
   // Get recent workouts (will return empty if Supabase not configured)
   let workouts: any[] | null = null;
-  let totalWorkouts = 0;
+  let ytdWorkouts = 0;
   let allWorkouts: any[] | null = null;
   let isMockMode = false;
 
@@ -43,17 +43,26 @@ export default async function DashboardPage() {
         .order("workout_date", { ascending: true });
       allWorkouts = allWorkoutsResult?.data || null;
 
+      const now = new Date();
+      const y = now.getFullYear();
+      const mo = String(now.getMonth() + 1).padStart(2, "0");
+      const da = String(now.getDate()).padStart(2, "0");
+      const todayStr = `${y}-${mo}-${da}`;
+      const yearStartStr = `${y}-01-01`;
+
       const countResult = await supabase
         .from("workouts")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", userId);
-      totalWorkouts = countResult?.count || 0;
+        .eq("user_id", userId)
+        .gte("workout_date", yearStartStr)
+        .lte("workout_date", todayStr);
+      ytdWorkouts = countResult?.count || 0;
     }
   } catch (error) {
     // Supabase not configured, use empty data for testing
     workouts = null;
     allWorkouts = null;
-    totalWorkouts = 0;
+    ytdWorkouts = 0;
   }
 
   return (
@@ -75,9 +84,9 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <DashboardStats 
-          serverWorkouts={allWorkouts} 
-          serverTotalWorkouts={totalWorkouts}
+        <DashboardStats
+          serverWorkouts={allWorkouts}
+          serverYtdWorkouts={ytdWorkouts}
         />
       </div>
 
