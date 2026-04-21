@@ -10,6 +10,28 @@ import { createClient } from "@/lib/supabase/client";
 import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp } from "lucide-react";
 import type { WorkoutWithExercises, Exercise, WorkoutFocus } from "@/lib/types";
 
+/** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
+function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
+  if (workout.focus !== "Cardio") {
+    return workout.focus;
+  }
+  const orderedUnique: string[] = [];
+  const seen = new Set<string>();
+  for (const we of workout.workout_exercises) {
+    const name = we.exercise?.name?.trim();
+    if (!name) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    orderedUnique.push(name);
+  }
+  if (orderedUnique.length === 0) {
+    return workout.focus;
+  }
+  const withoutCore = orderedUnique.filter((n) => n !== "Core");
+  const labelParts = withoutCore.length > 0 ? withoutCore : orderedUnique;
+  return `${workout.focus} - ${labelParts.join(", ")}`;
+}
+
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
 const parseLocalDate = (dateString: string): Date => {
   const [year, month, day] = dateString.split('-').map(Number);
@@ -23,6 +45,35 @@ const formatTime = (seconds: number): string => {
   const secs = seconds % 60;
   return `${minutes}:${secs.toString().padStart(2, "0")}`;
 };
+
+/** Rest between sets, stored as seconds on each workout_exercise row. */
+function formatRestInterval(seconds: number): string {
+  if (seconds <= 0) return "";
+  if (seconds % 60 === 0 && seconds >= 60) {
+    const m = seconds / 60;
+    return m === 1 ? "1 min" : `${m} mins`;
+  }
+  return `${seconds}s`;
+}
+
+/**
+ * Human-readable rest between sets. For Swimming, `rest_interval` is set count — do not show as rest.
+ */
+function getRestBetweenSetsLabel(
+  sets: Array<{ rest_interval?: number }>,
+  isSwimming: boolean
+): string | null {
+  if (isSwimming) return null;
+  const raw = sets
+    .map((s) => s.rest_interval)
+    .filter((r): r is number => typeof r === "number" && r > 0);
+  if (raw.length === 0) return null;
+  const uniq = [...new Set(raw)].sort((a, b) => a - b);
+  if (uniq.length === 1) {
+    return `Rest: ${formatRestInterval(uniq[0])}`;
+  }
+  return `Rest: ${uniq.map(formatRestInterval).join(" · ")}`;
+}
 
 interface WorkoutHistoryClientProps {
   serverWorkouts: WorkoutWithExercises[] | null;
@@ -492,7 +543,7 @@ export function WorkoutHistoryClient({
                     </div>
                     <div>
                       <CardTitle>
-                        {workout.focus}
+                        {getWorkoutHistoryCardTitle(workout)}
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
                         {format(parseLocalDate(workout.workout_date), "EEEE, MMMM d, yyyy")}
@@ -553,6 +604,11 @@ export function WorkoutHistoryClient({
                   const isHighlighted =
                     !!highlightExerciseId && highlightExerciseId === exercise.id;
 
+                  const restBetweenSetsLabel = getRestBetweenSetsLabel(
+                    sets,
+                    isSwimming
+                  );
+
                   return (
                     <div
                       key={exercise.id}
@@ -572,12 +628,19 @@ export function WorkoutHistoryClient({
                             // Swimming: reps = interval (seconds), weight = distance (yd), rest_interval = set count
                             // For Core exercises: reps stores time (seconds), weight is 0
                             if (isCardioWorkout && isSwimming) {
-                              const setCount =
+                              const swimSetCount =
                                 set.rest_interval != null && set.rest_interval > 0
-                                  ? `${set.rest_interval} sets`
-                                  : null;
+                                  ? set.rest_interval
+                                  : 0;
+                              const ydPerSet = set.weight > 0 ? Math.round(set.weight) : 0;
+                              const setCount =
+                                swimSetCount > 0 ? `${swimSetCount} sets` : null;
                               const distYd =
-                                set.weight > 0 ? `${Math.round(set.weight)} yd` : null;
+                                ydPerSet > 0 ? `${ydPerSet} yd` : null;
+                              const totalYards =
+                                swimSetCount > 0 && ydPerSet > 0
+                                  ? `${(swimSetCount * ydPerSet).toLocaleString()} yd total`
+                                  : null;
                               const intDisplay =
                                 set.reps > 0
                                   ? `${formatTime(set.reps)} interval`
@@ -587,7 +650,7 @@ export function WorkoutHistoryClient({
                                   key={set.set_number}
                                   className="text-sm text-muted-foreground"
                                 >
-                                  {[setCount, distYd, intDisplay].filter(Boolean).join(" • ") || "—"}
+                                  {[setCount, distYd, totalYards, intDisplay].filter(Boolean).join(" • ") || "—"}
                                 </div>
                               );
                             }
@@ -596,12 +659,21 @@ export function WorkoutHistoryClient({
                               const distanceDisplay = set.weight > 0 
                                 ? (isPeloton ? `${set.weight} kJ output` : `${set.weight} miles`)
                                 : null;
+                              const isRunning = exercise.name === "Running";
+                              const pacePerMileDisplay =
+                                isRunning &&
+                                !isPeloton &&
+                                set.weight > 0 &&
+                                set.reps > 0
+                                  ? `${formatTime(Math.round(set.reps / set.weight))} / mi`
+                                  : null;
                               return (
                                 <div
                                   key={set.set_number}
                                   className="text-sm text-muted-foreground"
                                 >
                                   {timeDisplay} minutes{distanceDisplay ? ` • ${distanceDisplay}` : ""}
+                                  {pacePerMileDisplay ? ` • ${pacePerMileDisplay}` : ""}
                                 </div>
                               );
                             } else if (isCoreExercise) {
@@ -637,6 +709,11 @@ export function WorkoutHistoryClient({
                             }
                           })}
                       </div>
+                      {restBetweenSetsLabel && (
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {restBetweenSetsLabel}
+                        </p>
+                      )}
                     </div>
                   );
                 })}

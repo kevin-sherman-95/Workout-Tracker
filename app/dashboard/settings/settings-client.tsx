@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTheme, type Theme } from "@/components/theme-provider";
 import { User, Settings, Bell, Shield, Palette, Save } from "lucide-react";
 
 interface UserInfo {
@@ -20,12 +22,24 @@ interface SettingsClientProps {
 }
 
 export function SettingsClient({ user }: SettingsClientProps) {
+  const searchParams = useSearchParams();
+  const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<"account" | "preferences" | "notifications">("account");
   const [displayName, setDisplayName] = useState(user?.name || user?.nickname || "");
   const [weightUnit, setWeightUnit] = useState("lbs");
-  const [theme, setTheme] = useState("dark");
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [workoutReminders, setWorkoutReminders] = useState(false);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (
+      tab === "account" ||
+      tab === "preferences" ||
+      tab === "notifications"
+    ) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   const tabs = [
     { id: "account" as const, label: "Account", icon: User },
@@ -157,15 +171,21 @@ export function SettingsClient({ user }: SettingsClientProps) {
                 </div>
 
                 <div className="space-y-3">
-                  <Label>Theme</Label>
-                  <div className="flex gap-3">
-                    {[
-                      { id: "dark", label: "Dark" },
-                      { id: "light", label: "Light" },
-                      { id: "system", label: "System" },
-                    ].map((t) => (
+                  <Label>Appearance</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Light or dark mode for the whole app. System follows your device setting.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {(
+                      [
+                        { id: "dark" as const, label: "Dark" },
+                        { id: "light" as const, label: "Light" },
+                        { id: "system" as const, label: "System" },
+                      ] satisfies { id: Theme; label: string }[]
+                    ).map((t) => (
                       <button
                         key={t.id}
+                        type="button"
                         onClick={() => setTheme(t.id)}
                         className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                           theme === t.id
