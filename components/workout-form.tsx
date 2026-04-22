@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Check, Save, ChevronDown, Clock, TrendingUp, TrendingDown, Minus, Trophy, X, ArrowRight, Info } from "lucide-react";
+import { Plus, Trash2, Check, Save, ChevronDown, Clock, Trophy, X, ArrowRight, Info } from "lucide-react";
 import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
 
 interface ExerciseUsage {
@@ -65,6 +65,97 @@ function restLabelFromSets(
     return `Rest: ${formatRestIntervalSeconds(uniq[0])}`;
   }
   return `Rest: ${uniq.map(formatRestIntervalSeconds).join(" · ")}`;
+}
+
+/** Lexicographic: heavier weight wins; at same weight, more reps wins. */
+function compareStrengthSets(
+  a: { weight: number; reps: number },
+  b: { weight: number; reps: number }
+): number {
+  if (a.weight !== b.weight) return a.weight - b.weight;
+  return a.reps - b.reps;
+}
+
+function describeStrengthChangeVsPrev(
+  curr: { bestWeight: number; bestReps: number },
+  prev: { bestWeight: number; bestReps: number }
+): { label: string; tone: "good" | "bad" | "neutral" } {
+  const cmp = compareStrengthSets(
+    { weight: curr.bestWeight, reps: curr.bestReps },
+    { weight: prev.bestWeight, reps: prev.bestReps }
+  );
+  if (cmp === 0) return { label: "Same as last time", tone: "neutral" };
+
+  const dw = curr.bestWeight - prev.bestWeight;
+  const dr = curr.bestReps - prev.bestReps;
+  const parts: string[] = [];
+  if (dw !== 0) {
+    parts.push(dw > 0 ? `+${dw} lbs` : `${dw} lbs`);
+  }
+  if (dr !== 0) {
+    const repWord = Math.abs(dr) === 1 ? "rep" : "reps";
+    parts.push(dr > 0 ? `+${dr} ${repWord}` : `${dr} ${repWord}`);
+  }
+  const label = parts.length > 0 ? parts.join(", ") : "Same as last time";
+  const tone: "good" | "bad" = cmp > 0 ? "good" : "bad";
+  return { label, tone };
+}
+
+function formatSignedTimeDelta(
+  diffSeconds: number,
+  formatTime: (s: number) => string
+): string {
+  if (diffSeconds === 0) return "";
+  const sign = diffSeconds > 0 ? "+" : "-";
+  const abs = Math.abs(diffSeconds);
+  const inner = formatTime(abs) || `${Math.floor(abs / 60)}:${(abs % 60).toString().padStart(2, "0")}`;
+  return `${sign}${inner}`;
+}
+
+function describeCardioCoreChangeVsPrev(
+  ex: { totalTime: number; totalDistance: number },
+  prevEx: { totalTime: number; totalDistance: number },
+  isCardioExercise: boolean,
+  formatTime: (s: number) => string,
+  formatDistance: (d: number) => string
+): { label: string; tone: "good" | "bad" | "neutral" } {
+  const dt = ex.totalTime - prevEx.totalTime;
+  const dd = isCardioExercise ? ex.totalDistance - prevEx.totalDistance : 0;
+
+  if (dt === 0 && dd === 0) {
+    return { label: "Same as last time", tone: "neutral" };
+  }
+
+  const parts: string[] = [];
+  if (dt !== 0) {
+    parts.push(`${formatSignedTimeDelta(dt, formatTime)} time`);
+  }
+  if (isCardioExercise && dd !== 0) {
+    const sign = dd > 0 ? "+" : "-";
+    parts.push(`${sign}${formatDistance(Math.abs(dd))} dist`);
+  }
+
+  let good = 0;
+  let bad = 0;
+  if (dt > 0) good++;
+  else if (dt < 0) bad++;
+  if (isCardioExercise) {
+    if (dd > 0) good++;
+    else if (dd < 0) bad++;
+  }
+
+  let tone: "good" | "bad" | "neutral";
+  if (good > 0 && bad === 0) tone = "good";
+  else if (bad > 0 && good === 0) tone = "bad";
+  else tone = "neutral";
+
+  return { label: parts.join(", "), tone };
+}
+
+function changeToneClass(tone: "good" | "bad" | "neutral"): string {
+  if (tone === "good") return "text-green-500 font-medium";
+  if (tone === "bad") return "text-orange-500 font-medium";
+  return "text-muted-foreground";
 }
 
 export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: WorkoutFormProps) {
@@ -1162,8 +1253,15 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           existing.totalTime += we.reps;
           if (isCardio) existing.totalDistance += we.weight;
         } else {
-          existing.bestWeight = Math.max(existing.bestWeight, we.weight);
-          existing.bestReps = Math.max(existing.bestReps, we.reps);
+          if (
+            compareStrengthSets(
+              { weight: we.weight, reps: we.reps },
+              { weight: existing.bestWeight, reps: existing.bestReps }
+            ) > 0
+          ) {
+            existing.bestWeight = we.weight;
+            existing.bestReps = we.reps;
+          }
           existing.totalVolume += we.reps * we.weight;
         }
       } else {
@@ -2128,25 +2226,6 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   );
 }
 
-function StatDelta({ current, previous, unit, higherIsBetter = true, formatFn }: {
-  current: number;
-  previous: number;
-  unit?: string;
-  higherIsBetter?: boolean;
-  formatFn?: (v: number) => string;
-}) {
-  const diff = current - previous;
-  if (diff === 0) return <span className="text-muted-foreground flex items-center gap-1"><Minus className="h-3 w-3" /> Same</span>;
-  const improved = higherIsBetter ? diff > 0 : diff < 0;
-  const display = formatFn ? formatFn(Math.abs(diff)) : Math.abs(diff).toLocaleString();
-  return (
-    <span className={`flex items-center gap-1 font-medium ${improved ? "text-green-500" : "text-orange-500"}`}>
-      {improved ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-      {diff > 0 ? "+" : "-"}{display}{unit ? ` ${unit}` : ""}
-    </span>
-  );
-}
-
 function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTime, onClose }: {
   currentStats: NonNullable<ReturnType<typeof Object>>;
   previousStats: NonNullable<ReturnType<typeof Object>> | null;
@@ -2185,53 +2264,6 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
         </div>
 
         <div className="p-6 space-y-5">
-          {/* Overview Stats */}
-          <div className={`grid gap-3 ${isCardio ? "grid-cols-2" : "grid-cols-3"}`}>
-            {!isCardio && (
-              <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold">{curr.totalVolume.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">Total Volume (lbs)</p>
-                {prev && (
-                  <div className="mt-1 text-xs">
-                    <StatDelta current={curr.totalVolume} previous={prev.totalVolume} unit="lbs" />
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="bg-muted/50 rounded-lg p-3 text-center">
-              <p className="text-2xl font-bold">{curr.totalSets}</p>
-              <p className="text-xs text-muted-foreground">Total Sets</p>
-              {prev && (
-                <div className="mt-1 text-xs">
-                  <StatDelta current={curr.totalSets} previous={prev.totalSets} />
-                </div>
-              )}
-            </div>
-            {isCardio ? (
-              <>
-                <div className="bg-muted/50 rounded-lg p-3 text-center">
-                  <p className="text-2xl font-bold">{formatTime(curr.totalTime) || "0:00"}</p>
-                  <p className="text-xs text-muted-foreground">Total Time</p>
-                  {prev && (
-                    <div className="mt-1 text-xs">
-                      <StatDelta current={curr.totalTime} previous={prev.totalTime} formatFn={formatTime} />
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <div className="bg-muted/50 rounded-lg p-3 text-center">
-                <p className="text-2xl font-bold">{curr.totalReps}</p>
-                <p className="text-xs text-muted-foreground">Total Reps</p>
-                {prev && (
-                  <div className="mt-1 text-xs">
-                    <StatDelta current={curr.totalReps} previous={prev.totalReps} />
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
           {/* Per-exercise breakdown */}
           {curr.exerciseBreakdown.length > 0 && (
             <div>
@@ -2240,6 +2272,36 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
                 {curr.exerciseBreakdown.map((ex: any, i: number) => {
                   const prevEx = prev?.exerciseBreakdown?.find((p: any) => p.name === ex.name);
                   const isCoreExercise = ex.name === "Core";
+
+                  let vsLastNode: React.ReactNode = (
+                    <span className="text-muted-foreground">—</span>
+                  );
+                  if (prev) {
+                    if (prevEx) {
+                      if (isCardio || isCoreExercise) {
+                        const { label, tone } = describeCardioCoreChangeVsPrev(
+                          ex,
+                          prevEx,
+                          isCardio,
+                          formatTime,
+                          formatDistance
+                        );
+                        vsLastNode = (
+                          <span className={changeToneClass(tone)}>{label}</span>
+                        );
+                      } else {
+                        const { label, tone } = describeStrengthChangeVsPrev(ex, prevEx);
+                        vsLastNode = (
+                          <span className={changeToneClass(tone)}>{label}</span>
+                        );
+                      }
+                    } else {
+                      vsLastNode = (
+                        <span className="text-muted-foreground">Not in last workout</span>
+                      );
+                    }
+                  }
+
                   return (
                     <div key={i} className="bg-muted/30 rounded-lg p-3">
                       <p className="font-medium text-sm mb-2">{ex.name}</p>
@@ -2254,7 +2316,7 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
                           )}
                         </div>
                         {(isCardio || isCoreExercise) ? (
-                          <>
+                          <div className="space-y-0.5">
                             <div>
                               <span className="text-muted-foreground">Time: </span>
                               <span className="font-medium">{formatTime(ex.totalTime) || "0:00"}</span>
@@ -2265,29 +2327,17 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
                                 <span className="font-medium">{formatDistance(ex.totalDistance)}</span>
                               </div>
                             )}
-                          </>
+                          </div>
                         ) : (
-                          <>
-                            <div>
-                              <span className="text-muted-foreground">Best: </span>
-                              <span className="font-medium">{ex.bestWeight} lbs x {ex.bestReps}</span>
-                              {prevEx && (ex.bestWeight !== prevEx.bestWeight) && (
-                                <span className={ex.bestWeight > prevEx.bestWeight ? " text-green-500" : " text-orange-500"}>
-                                  {" "}{ex.bestWeight > prevEx.bestWeight ? "\u2191" : "\u2193"}
-                                </span>
-                              )}
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Vol: </span>
-                              <span className="font-medium">{ex.totalVolume.toLocaleString()}</span>
-                              {prevEx && prevEx.totalVolume !== ex.totalVolume && (
-                                <span className={ex.totalVolume > prevEx.totalVolume ? " text-green-500" : " text-orange-500"}>
-                                  {" "}{ex.totalVolume > prevEx.totalVolume ? "+" : ""}{(ex.totalVolume - prevEx.totalVolume).toLocaleString()}
-                                </span>
-                              )}
-                            </div>
-                          </>
+                          <div>
+                            <span className="text-muted-foreground">Best: </span>
+                            <span className="font-medium">{ex.bestWeight} lbs x {ex.bestReps}</span>
+                          </div>
                         )}
+                        <div>
+                          <span className="text-muted-foreground">vs last: </span>
+                          {vsLastNode}
+                        </div>
                       </div>
                     </div>
                   );
