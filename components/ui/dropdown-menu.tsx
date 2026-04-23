@@ -13,7 +13,12 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
   const [open, setOpen] = React.useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
 
+  const toggle = React.useCallback(() => {
+    setOpen((o) => !o);
+  }, []);
+
   React.useEffect(() => {
+    if (!open) return;
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setOpen(false);
@@ -22,11 +27,35 @@ export function DropdownMenu({ trigger, children, align = "right" }: DropdownMen
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [open]);
+
+  // Put the open handler on the real trigger (e.g. `Button` → native <button>).
+  // A wrapper <div onClick> around <button> does not receive the click in some UAs / embedded preview.
+  const triggerProps = (
+    React.isValidElement(trigger) ? (trigger as React.ReactElement) : null
+  )?.props as { onClick?: React.MouseEventHandler<unknown>; type?: string } | undefined;
+
+  const renderedTrigger = React.isValidElement(trigger)
+    ? React.cloneElement(trigger as React.ReactElement, {
+        type: triggerProps?.type ?? "button",
+        onClick: (e: React.MouseEvent<unknown>) => {
+          triggerProps?.onClick?.(e);
+          if (!e.defaultPrevented) {
+            toggle();
+          }
+        },
+        "aria-haspopup": "menu" as const,
+        "aria-expanded": open,
+      } as React.HTMLAttributes<HTMLElement> & { type?: string } & { "aria-expanded"?: boolean })
+    : (
+        <div className="inline-block" onClick={toggle} role="presentation">
+          {trigger}
+        </div>
+      );
 
   return (
     <div className="relative" ref={menuRef}>
-      <div onClick={() => setOpen(!open)}>{trigger}</div>
+      {renderedTrigger}
       {open && (
         <div
           className={cn(
@@ -56,6 +85,7 @@ export function DropdownMenuItem({
 }: DropdownMenuItemProps) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className={cn(
         "flex w-full items-center px-3 py-2 text-sm transition-colors",
