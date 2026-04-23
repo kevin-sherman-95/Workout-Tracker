@@ -16,14 +16,19 @@ const parseLocalDate = (dateString: string): Date => {
 
 export default async function DashboardPage() {
   // Get recent workouts (will return empty if Supabase not configured)
-  let workouts: any[] | null = null;
+  let workouts: any[] = [];
   let ytdWorkouts = 0;
-  let allWorkouts: any[] | null = null;
+  let allWorkouts: any[] = [];
   let isMockMode = false;
 
   try {
     const { supabase, userId, isMockMode: mock } = await getSupabaseWithUser();
     isMockMode = mock;
+
+    if (!userId) {
+      workouts = [];
+      allWorkouts = [];
+    }
 
     // Only fetch workouts if we have a valid user
     if (userId) {
@@ -33,7 +38,7 @@ export default async function DashboardPage() {
         .eq("user_id", userId)
         .order("workout_date", { ascending: false })
         .limit(5);
-      workouts = workoutsResult?.data || null;
+      workouts = workoutsResult?.data ?? [];
 
       // Get all workouts for calendar
       const allWorkoutsResult = await supabase
@@ -41,7 +46,7 @@ export default async function DashboardPage() {
         .select("id, workout_date, focus, created_at")
         .eq("user_id", userId)
         .order("workout_date", { ascending: true });
-      allWorkouts = allWorkoutsResult?.data || null;
+      allWorkouts = allWorkoutsResult?.data ?? [];
 
       const now = new Date();
       const y = now.getFullYear();
@@ -60,8 +65,8 @@ export default async function DashboardPage() {
     }
   } catch (error) {
     // Supabase not configured, use empty data for testing
-    workouts = null;
-    allWorkouts = null;
+    workouts = [];
+    allWorkouts = [];
     ytdWorkouts = 0;
   }
 
@@ -91,7 +96,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <WorkoutCalendar workouts={allWorkouts} />
+        <WorkoutCalendar workouts={allWorkouts} isMockMode={isMockMode} />
         
         {workouts && workouts.length > 0 && (
           <Card>

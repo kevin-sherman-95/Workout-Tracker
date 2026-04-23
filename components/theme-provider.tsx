@@ -22,6 +22,14 @@ function resolve(theme: Theme): "light" | "dark" {
   return theme;
 }
 
+/** Resolves "system" to the effective light/dark. Safe to call in client components after mount. */
+export function getResolvedTheme(theme: Theme): "light" | "dark" {
+  if (typeof window === "undefined") {
+    return "dark";
+  }
+  return resolve(theme);
+}
+
 function applyToDocument(theme: Theme) {
   document.documentElement.classList.toggle(
     "dark",

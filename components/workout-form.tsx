@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { createClient, isInMockMode } from "@/lib/supabase/client";
+import { todayInPacific } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -168,7 +169,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   
   const [focus, setFocus] = useState<WorkoutFocus>("Chest / Shoulders / Triceps");
   const [workoutDate, setWorkoutDate] = useState(
-    initialDate || new Date().toISOString().split("T")[0]
+    initialDate || todayInPacific()
   );
   const [notes, setNotes] = useState("");
   const [bodyWeight, setBodyWeight] = useState<string>("");

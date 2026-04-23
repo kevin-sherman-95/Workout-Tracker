@@ -10,9 +10,11 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSam
 
 interface WorkoutCalendarProps {
   workouts?: Array<{ workout_date: string; focus?: string; id?: string }> | null;
+  /** When true, empty server data still falls back to localStorage (mock / offline). */
+  isMockMode?: boolean;
 }
 
-export function WorkoutCalendar({ workouts = [] }: WorkoutCalendarProps) {
+export function WorkoutCalendar({ workouts = [], isMockMode = false }: WorkoutCalendarProps) {
   const router = useRouter();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [allWorkouts, setAllWorkouts] = useState<Array<{ workout_date: string; focus?: string; id?: string }>>(workouts || []);
@@ -38,15 +40,20 @@ export function WorkoutCalendar({ workouts = [] }: WorkoutCalendarProps) {
 
   // Load workouts on mount and when server workouts change
   useEffect(() => {
-    // If we have valid server data, use it
-    if (workouts && workouts.length > 0) {
-      setAllWorkouts(workouts);
+    if (workouts == null) {
+      if (isMockMode) {
+        loadWorkoutsFromLocalStorage();
+      } else {
+        setAllWorkouts([]);
+      }
       return;
     }
-    
-    // Otherwise, always try to load from localStorage as fallback
-    loadWorkoutsFromLocalStorage();
-  }, [workouts, loadWorkoutsFromLocalStorage]);
+    if (isMockMode && workouts.length === 0) {
+      loadWorkoutsFromLocalStorage();
+      return;
+    }
+    setAllWorkouts(workouts);
+  }, [workouts, isMockMode, loadWorkoutsFromLocalStorage]);
 
   // Listen for workout updates to refresh the calendar
   useEffect(() => {
