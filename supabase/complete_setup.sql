@@ -403,6 +403,10 @@ SELECT 'Running', id FROM muscle_groups WHERE name = 'Cardio'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 
 INSERT INTO exercises (name, muscle_group_id)
+SELECT 'Walking', id FROM muscle_groups WHERE name = 'Cardio'
+ON CONFLICT (name, muscle_group_id) DO NOTHING;
+
+INSERT INTO exercises (name, muscle_group_id)
 SELECT 'Cycling', id FROM muscle_groups WHERE name = 'Cardio'
 ON CONFLICT (name, muscle_group_id) DO NOTHING;
 

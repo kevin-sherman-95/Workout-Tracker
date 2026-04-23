@@ -58,12 +58,14 @@ function formatRestInterval(seconds: number): string {
 
 /**
  * Human-readable rest between sets. For Swimming, `rest_interval` is set count — do not show as rest.
+ * For Walking, `rest_interval` stores pace (sec/mi) — do not show as rest.
  */
 function getRestBetweenSetsLabel(
   sets: Array<{ rest_interval?: number }>,
-  isSwimming: boolean
+  isSwimming: boolean,
+  isWalking: boolean
 ): string | null {
-  if (isSwimming) return null;
+  if (isSwimming || isWalking) return null;
   const raw = sets
     .map((s) => s.rest_interval)
     .filter((r): r is number => typeof r === "number" && r > 0);
@@ -600,13 +602,15 @@ export function WorkoutHistoryClient({
                   // Check if this is a Peloton exercise to show output instead of distance
                   const isPeloton = exercise.name === "Peloton";
                   const isSwimming = exercise.name === "Swimming";
+                  const isWalking = exercise.name === "Walking";
                   
                   const isHighlighted =
                     !!highlightExerciseId && highlightExerciseId === exercise.id;
 
                   const restBetweenSetsLabel = getRestBetweenSetsLabel(
                     sets,
-                    isSwimming
+                    isSwimming,
+                    isWalking
                   );
 
                   return (
@@ -627,6 +631,27 @@ export function WorkoutHistoryClient({
                             // For cardio workouts: reps stores time (seconds), weight stores distance
                             // Swimming: reps = interval (seconds), weight = distance (yd), rest_interval = set count
                             // For Core exercises: reps stores time (seconds), weight is 0
+                            if (isCardioWorkout && isWalking) {
+                              const timeDisplay = formatTime(set.reps);
+                              const inclineDisplay =
+                                set.weight > 0
+                                  ? `${Number(set.weight) % 1 === 0 ? Math.round(Number(set.weight)) : set.weight}% incline`
+                                  : null;
+                              const paceDisplay =
+                                set.rest_interval != null && set.rest_interval > 0
+                                  ? `${formatTime(set.rest_interval)} / mi`
+                                  : null;
+                              return (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  {[timeDisplay + " minutes", inclineDisplay, paceDisplay]
+                                    .filter(Boolean)
+                                    .join(" • ") || "—"}
+                                </div>
+                              );
+                            }
                             if (isCardioWorkout && isSwimming) {
                               const swimSetCount =
                                 set.rest_interval != null && set.rest_interval > 0
