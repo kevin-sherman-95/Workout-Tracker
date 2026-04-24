@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { AccountMenu } from "@/components/account-menu";
 import {
   LayoutDashboard,
-  Plus,
   History,
   TrendingUp,
 } from "lucide-react";
@@ -20,7 +19,6 @@ export function Nav({ userName, userPicture }: NavProps) {
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/dashboard/log", label: "Log Workout", icon: Plus },
     { href: "/dashboard/history", label: "History", icon: History },
     { href: "/dashboard/progress", label: "Progress", icon: TrendingUp },
   ];
