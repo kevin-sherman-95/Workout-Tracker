@@ -289,17 +289,9 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     return Array.from(exerciseSet).sort();
   }, [workouts]);
 
-  // Track which exercises are selected
+  // Track which exercises are selected. Starts empty; populated once the user
+  // picks a workout focus from the dropdown below.
   const [selectedExercises, setSelectedExercises] = useState<Set<string>>(new Set());
-
-  // Initialize selected exercises when allExercises changes
-  useEffect(() => {
-    if (allExercises.length > 0 && selectedExercises.size === 0) {
-      // Select first 5 exercises by default
-      setSelectedExercises(new Set(allExercises.slice(0, 5)));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allExercises]);
 
   // Track time view selection
   const [timeView, setTimeView] = useState<TimeView>("daily");
@@ -323,23 +315,27 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     ""
   );
 
-  useEffect(() => {
-    if (!workoutTypePreset) return;
-    const matched = exerciseNamesForWorkoutFocus(
+  // Exercises that belong to the currently-selected workout focus. Used both
+  // to seed the selection when the focus changes and to scope the button strip
+  // so users never see exercises from other focuses.
+  const focusExerciseNames = useMemo(() => {
+    if (!workoutTypePreset) return [] as string[];
+    return exerciseNamesForWorkoutFocus(
       workoutTypePreset,
       allExercises,
       exerciseNameToMuscleGroup,
       workouts
     );
-    if (matched.length > 0) {
-      setSelectedExercises(new Set(matched));
-    }
-  }, [
-    workoutTypePreset,
-    allExercises,
-    exerciseNameToMuscleGroup,
-    workouts,
-  ]);
+  }, [workoutTypePreset, allExercises, exerciseNameToMuscleGroup, workouts]);
+
+  useEffect(() => {
+    if (!workoutTypePreset) return;
+    // Always replace the selection with exactly the focus's exercises. This
+    // ensures nothing from a prior focus (Core, Lateral Raises, etc.) ever
+    // stays selected when the user switches to e.g. Chest / Shoulders /
+    // Triceps.
+    setSelectedExercises(new Set(focusExerciseNames));
+  }, [workoutTypePreset, focusExerciseNames]);
 
   // Helper function to parse date safely (handles YYYY-MM-DD format)
   const parseWorkoutDate = (dateString: string): Date => {
@@ -497,7 +493,9 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
   };
 
   const selectAll = () => {
-    setSelectedExercises(new Set(allExercises));
+    // Only (re)select exercises that belong to the current focus, so the
+    // button strip and chart never surface unrelated workouts.
+    setSelectedExercises(new Set(focusExerciseNames));
   };
 
   const deselectAll = () => {
@@ -511,7 +509,12 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     "#82ca9d", "#ffc658", "#ff7300", "#00ff00", "#0088fe",
   ];
 
-  const selectedExercisesArray = Array.from(selectedExercises);
+  // When a focus is active, limit rendered lines/buttons to the focus's
+  // exercises. When in manual mode, fall back to every selected exercise.
+  const visibleSelectedExercises = workoutTypePreset
+    ? focusExerciseNames.filter((name) => selectedExercises.has(name))
+    : Array.from(selectedExercises);
+  const selectedExercisesArray = visibleSelectedExercises;
 
   return (
     <div className="space-y-4">
@@ -573,50 +576,49 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
             </Select>
           </div>
 
-          {/* Exercise Selection */}
-          <div className="mb-6 space-y-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={selectAll}
-                className="text-xs"
-              >
-                Select All
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={deselectAll}
-                className="text-xs"
-              >
-                Deselect All
-              </Button>
-              <div className="w-px h-6 bg-border mx-2" />
-              {allExercises.map((exerciseName, index) => {
-                const isSelected = selectedExercises.has(exerciseName);
-                return (
-                  <Button
-                    key={exerciseName}
-                    variant={isSelected ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => toggleExercise(exerciseName)}
-                    className="text-xs"
-                    style={
-                      isSelected
-                        ? {
-                            backgroundColor: colors[index % colors.length],
-                            borderColor: colors[index % colors.length],
-                          }
-                        : {}
-                    }
-                  >
-                    {exerciseName}
-                  </Button>
-                );
-              })}
+          {/* Exercise Selection — only visible once a workout focus is picked */}
+          {workoutTypePreset ? (
+            <div className="mb-6 space-y-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={selectAll}
+                  className="text-xs"
+                >
+                  Select All
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={deselectAll}
+                  className="text-xs"
+                >
+                  Deselect All
+                </Button>
+                <div className="w-px h-6 bg-border mx-2" />
+                {focusExerciseNames.map((exerciseName, index) => {
+                  const isSelected = selectedExercises.has(exerciseName);
+                  if (!isSelected) return null;
+                  return (
+                    <Button
+                      key={exerciseName}
+                      variant="default"
+                      size="sm"
+                      onClick={() => toggleExercise(exerciseName)}
+                      className="text-xs"
+                      style={{
+                        backgroundColor: colors[index % colors.length],
+                        borderColor: colors[index % colors.length],
+                      }}
+                    >
+                      {exerciseName}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           {/* Chart */}
           {selectedExercisesArray.length > 0 ? (
@@ -680,8 +682,10 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
                 )}
             </div>
           ) : (
-            <div className="h-[500px] flex items-center justify-center text-muted-foreground">
-              Select at least one exercise to view progress
+            <div className="h-[500px] flex items-center justify-center text-muted-foreground text-center px-4">
+              {workoutTypePreset
+                ? "Select at least one exercise to view progress"
+                : "Pick a workout type above to choose exercises and view progress"}
             </div>
           )}
         </CardContent>
