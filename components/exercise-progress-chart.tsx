@@ -155,11 +155,14 @@ function LineExerciseDot({
     e.stopPropagation();
     const wid = payload[widKey(exerciseName)];
     const eid = payload[eidKey(exerciseName)];
-    if (typeof wid === "string" && typeof eid === "string" && wid && eid) {
-      router.push(
-        `/dashboard/history?workout=${encodeURIComponent(wid)}&exercise=${encodeURIComponent(eid)}`
-      );
-    }
+    if (typeof wid !== "string" || !wid) return;
+    const base = `/dashboard/history?workout=${encodeURIComponent(wid)}`;
+    // Body weight points aren't tied to an exercise row — just open the workout.
+    const url =
+      typeof eid === "string" && eid
+        ? `${base}&exercise=${encodeURIComponent(eid)}`
+        : base;
+    router.push(url);
   };
 
   return (
@@ -221,6 +224,15 @@ const WORKOUT_FOCUS_OPTIONS: WorkoutFocus[] = [
   "Cardio",
   "Other",
 ];
+
+/**
+ * Virtual "exercise" name used to plot the user's manually-logged body weight
+ * on the progress chart. Not a real Exercise row — body weight is stored
+ * directly on each workout as `body_weight`.
+ */
+const BODY_WEIGHT_METRIC = "Body Weight";
+
+type WorkoutTypePreset = WorkoutFocus | typeof BODY_WEIGHT_METRIC | "";
 
 const FOCUS_TO_MUSCLE_GROUPS: Record<WorkoutFocus, readonly string[]> = {
   "Chest / Shoulders / Triceps": ["Chest", "Shoulders", "Triceps"],
@@ -311,15 +323,15 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     return map;
   }, [workouts]);
 
-  const [workoutTypePreset, setWorkoutTypePreset] = useState<WorkoutFocus | "">(
-    ""
-  );
+  const [workoutTypePreset, setWorkoutTypePreset] =
+    useState<WorkoutTypePreset>("");
 
   // Exercises that belong to the currently-selected workout focus. Used both
   // to seed the selection when the focus changes and to scope the button strip
   // so users never see exercises from other focuses.
   const focusExerciseNames = useMemo(() => {
     if (!workoutTypePreset) return [] as string[];
+    if (workoutTypePreset === BODY_WEIGHT_METRIC) return [BODY_WEIGHT_METRIC];
     return exerciseNamesForWorkoutFocus(
       workoutTypePreset,
       allExercises,
@@ -431,9 +443,29 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
         });
       });
 
-      // Only create data point if there's data for at least one selected exercise
-      const hasData = Array.from(selectedExercises).some(exerciseName => exerciseMaxWeights[exerciseName] !== undefined);
-      if (!hasData) return;
+      // Body weight is a per-workout field (not a workout_exercise row). When
+      // selected, roll up the highest body_weight reported on this date so a
+      // day with multiple workouts still produces a single data point.
+      let bodyWeightForDay: number | undefined;
+      let bodyWeightWorkoutId: string | undefined;
+      if (selectedExercises.has(BODY_WEIGHT_METRIC)) {
+        dateWorkouts.forEach((workout) => {
+          const bw = Number(workout.body_weight);
+          if (!Number.isFinite(bw) || bw <= 0) return;
+          if (bodyWeightForDay === undefined || bw > bodyWeightForDay) {
+            bodyWeightForDay = bw;
+            bodyWeightWorkoutId = workout.id;
+          }
+        });
+      }
+
+      // Only create a data point if at least one selected metric has data.
+      const hasExerciseData = Array.from(selectedExercises).some(
+        (name) =>
+          name !== BODY_WEIGHT_METRIC && exerciseMaxWeights[name] !== undefined
+      );
+      const hasBodyWeightData = bodyWeightForDay !== undefined;
+      if (!hasExerciseData && !hasBodyWeightData) return;
 
       const dateValue = parseWorkoutDate(dateKey);
       
@@ -454,6 +486,13 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
 
       // Add max weight, reps at that weight, and contributing workout for each selected exercise
       selectedExercises.forEach((exerciseName) => {
+        if (exerciseName === BODY_WEIGHT_METRIC) {
+          dataPoint[BODY_WEIGHT_METRIC] = bodyWeightForDay;
+          if (bodyWeightWorkoutId) {
+            dataPoint[widKey(BODY_WEIGHT_METRIC)] = bodyWeightWorkoutId;
+          }
+          return;
+        }
         const w = exerciseMaxWeights[exerciseName];
         dataPoint[exerciseName] = w;
         dataPoint[repsFieldKey(exerciseName)] =
@@ -563,16 +602,23 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
               className="w-full max-w-md sm:w-80"
               value={workoutTypePreset}
               onChange={(e) =>
-                setWorkoutTypePreset((e.target.value as WorkoutFocus) || "")
+                setWorkoutTypePreset(
+                  (e.target.value as WorkoutTypePreset) || ""
+                )
               }
               aria-label="Filter exercises by workout type"
             >
               <option value="">Manual selection…</option>
-              {WORKOUT_FOCUS_OPTIONS.map((focus) => (
-                <option key={focus} value={focus}>
-                  {focus}
-                </option>
-              ))}
+              <optgroup label="Workout focus">
+                {WORKOUT_FOCUS_OPTIONS.map((focus) => (
+                  <option key={focus} value={focus}>
+                    {focus}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="Other metrics">
+                <option value={BODY_WEIGHT_METRIC}>{BODY_WEIGHT_METRIC}</option>
+              </optgroup>
             </Select>
           </div>
 
