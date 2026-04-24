@@ -599,18 +599,29 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
                 <div className="w-px h-6 bg-border mx-2" />
                 {focusExerciseNames.map((exerciseName, index) => {
                   const isSelected = selectedExercises.has(exerciseName);
-                  if (!isSelected) return null;
+                  const color = colors[index % colors.length];
                   return (
                     <Button
                       key={exerciseName}
-                      variant="default"
+                      variant={isSelected ? "default" : "outline"}
                       size="sm"
                       onClick={() => toggleExercise(exerciseName)}
-                      className="text-xs"
-                      style={{
-                        backgroundColor: colors[index % colors.length],
-                        borderColor: colors[index % colors.length],
-                      }}
+                      className={
+                        isSelected
+                          ? "text-xs"
+                          : "text-xs opacity-60 hover:opacity-100"
+                      }
+                      style={
+                        isSelected
+                          ? { backgroundColor: color, borderColor: color }
+                          : undefined
+                      }
+                      aria-pressed={isSelected}
+                      title={
+                        isSelected
+                          ? `Hide ${exerciseName} from chart`
+                          : `Show ${exerciseName} on chart`
+                      }
                     >
                       {exerciseName}
                     </Button>
