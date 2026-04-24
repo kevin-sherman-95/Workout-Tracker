@@ -34,9 +34,29 @@ function canonicalizeFocusLabel(focus: string): string {
 }
 
 const REP_COUNT_EXERCISES = new Set(["Pull-ups"]);
+const RUNNING_EXERCISES = new Set(["Running"]);
+const CARDIO_DISTANCE_EXERCISES = new Set(["Cycling"]);
+const CARDIO_OUTPUT_EXERCISES = new Set(["Peloton"]);
+const SWIM_EXERCISES = new Set(["Swimming"]);
+const DURATION_ONLY_EXERCISES = new Set(["Walking", "Core"]);
 
-function isRepCountPR(exerciseName: string): boolean {
-  return REP_COUNT_EXERCISES.has(exerciseName);
+type PRKind =
+  | "weight"
+  | "session-reps"
+  | "running"
+  | "cardio-distance"
+  | "cardio-output"
+  | "swim"
+  | "duration";
+
+function getPRKind(exerciseName: string): PRKind {
+  if (REP_COUNT_EXERCISES.has(exerciseName)) return "session-reps";
+  if (RUNNING_EXERCISES.has(exerciseName)) return "running";
+  if (CARDIO_DISTANCE_EXERCISES.has(exerciseName)) return "cardio-distance";
+  if (CARDIO_OUTPUT_EXERCISES.has(exerciseName)) return "cardio-output";
+  if (SWIM_EXERCISES.has(exerciseName)) return "swim";
+  if (DURATION_ONLY_EXERCISES.has(exerciseName)) return "duration";
+  return "weight";
 }
 
 type PREntry =
@@ -55,6 +75,46 @@ type PREntry =
       exerciseId: string;
       totalReps: number;
       sets: number;
+    }
+  | {
+      kind: "running";
+      date: string;
+      workoutId: string;
+      exerciseId: string;
+      distanceMi: number;
+      timeSec: number;
+    }
+  | {
+      kind: "cardio-distance";
+      date: string;
+      workoutId: string;
+      exerciseId: string;
+      distanceMi: number;
+      timeSec: number;
+    }
+  | {
+      kind: "cardio-output";
+      date: string;
+      workoutId: string;
+      exerciseId: string;
+      outputKJ: number;
+      timeSec: number;
+    }
+  | {
+      kind: "swim";
+      date: string;
+      workoutId: string;
+      exerciseId: string;
+      totalYards: number;
+      timeSec: number;
+      sets: number;
+    }
+  | {
+      kind: "duration";
+      date: string;
+      workoutId: string;
+      exerciseId: string;
+      timeSec: number;
     };
 
 interface ExercisePR {
@@ -73,6 +133,14 @@ interface SessionSummary {
   setCount: number;
   bestSetWeight: number;
   bestSetReps: number;
+  /** Sum of `weight` across rows — miles for Running/Cycling, kJ for Peloton. */
+  totalDistanceOrOutput: number;
+  /** Sum of `reps` interpreted as seconds — used for cardio/duration timings. */
+  totalTimeSec: number;
+  /** For Swimming: sum of (weight × rest_interval) across rows = total yards. */
+  totalSwimYards: number;
+  /** For Swimming: sum of rest_interval across rows = total set count. */
+  totalSwimSets: number;
 }
 
 function getExercisePRs(
@@ -113,9 +181,17 @@ function getExercisePRs(
           setCount: 0,
           bestSetWeight: -Infinity,
           bestSetReps: 0,
+          totalDistanceOrOutput: 0,
+          totalTimeSec: 0,
+          totalSwimYards: 0,
+          totalSwimSets: 0,
         };
         entry.sessions.set(workout.id, session);
       }
+
+      const weight = Number(we.weight) || 0;
+      const reps = Number(we.reps) || 0;
+      const swimSets = Number(we.rest_interval) || 0;
 
       session.totalReps += we.reps;
       session.setCount += 1;
@@ -123,6 +199,13 @@ function getExercisePRs(
         session.bestSetWeight = we.weight;
         session.bestSetReps = we.reps;
       }
+      // Cardio/duration rows store time in `reps` (seconds) and distance/output
+      // in `weight`. Swimming additionally stores per-row set count in
+      // `rest_interval`, so total yards = weight (yd/set) × rest_interval.
+      session.totalDistanceOrOutput += weight;
+      session.totalTimeSec += reps;
+      session.totalSwimYards += weight * swimSets;
+      session.totalSwimSets += swimSets;
     });
   });
 
@@ -130,19 +213,67 @@ function getExercisePRs(
 
   byExercise.forEach(({ name, muscleGroup, sessions }) => {
     const sessionList = Array.from(sessions.values());
-    const repMode = isRepCountPR(name);
+    const kind = getPRKind(name);
 
-    const toEntry = (s: SessionSummary): PREntry =>
-      repMode
-        ? {
+    const toEntry = (s: SessionSummary): PREntry => {
+      switch (kind) {
+        case "session-reps":
+          return {
             kind: "session-reps",
             date: s.date,
             workoutId: s.workoutId,
             exerciseId: s.exerciseId,
             totalReps: s.totalReps,
             sets: s.setCount,
-          }
-        : {
+          };
+        case "running":
+          return {
+            kind: "running",
+            date: s.date,
+            workoutId: s.workoutId,
+            exerciseId: s.exerciseId,
+            distanceMi: s.totalDistanceOrOutput,
+            timeSec: s.totalTimeSec,
+          };
+        case "cardio-distance":
+          return {
+            kind: "cardio-distance",
+            date: s.date,
+            workoutId: s.workoutId,
+            exerciseId: s.exerciseId,
+            distanceMi: s.totalDistanceOrOutput,
+            timeSec: s.totalTimeSec,
+          };
+        case "cardio-output":
+          return {
+            kind: "cardio-output",
+            date: s.date,
+            workoutId: s.workoutId,
+            exerciseId: s.exerciseId,
+            outputKJ: s.totalDistanceOrOutput,
+            timeSec: s.totalTimeSec,
+          };
+        case "swim":
+          return {
+            kind: "swim",
+            date: s.date,
+            workoutId: s.workoutId,
+            exerciseId: s.exerciseId,
+            totalYards: s.totalSwimYards,
+            timeSec: s.totalTimeSec,
+            sets: s.totalSwimSets,
+          };
+        case "duration":
+          return {
+            kind: "duration",
+            date: s.date,
+            workoutId: s.workoutId,
+            exerciseId: s.exerciseId,
+            timeSec: s.totalTimeSec,
+          };
+        case "weight":
+        default:
+          return {
             kind: "weight",
             date: s.date,
             workoutId: s.workoutId,
@@ -150,9 +281,26 @@ function getExercisePRs(
             weight: s.bestSetWeight === -Infinity ? 0 : s.bestSetWeight,
             reps: s.bestSetReps,
           };
+      }
+    };
 
-    const score = (s: SessionSummary) =>
-      repMode ? s.totalReps : s.bestSetWeight;
+    const score = (s: SessionSummary) => {
+      switch (kind) {
+        case "session-reps":
+          return s.totalReps;
+        case "running":
+        case "cardio-distance":
+        case "cardio-output":
+          return s.totalDistanceOrOutput;
+        case "swim":
+          return s.totalSwimYards;
+        case "duration":
+          return s.totalTimeSec;
+        case "weight":
+        default:
+          return s.bestSetWeight;
+      }
+    };
 
     const bestOf = (list: SessionSummary[]) =>
       list.reduce<SessionSummary | null>((best, s) => {
@@ -162,14 +310,19 @@ function getExercisePRs(
 
     const allTimeSession = bestOf(sessionList);
     if (!allTimeSession) return;
+    // Hide exercises whose best session has no meaningful score (e.g. a Cycling
+    // row logged with 0 mi). They'll reappear automatically once a session
+    // with real data is logged.
+    if (score(allTimeSession) <= 0) return;
 
     const ytdSession = bestOf(sessionList.filter((s) => s.inYtd));
+    const ytdHasRealData = ytdSession != null && score(ytdSession) > 0;
 
     results.push({
       exercise: name,
       muscleGroup,
       allTime: toEntry(allTimeSession),
-      ytd: ytdSession ? toEntry(ytdSession) : null,
+      ytd: ytdHasRealData ? toEntry(ytdSession!) : null,
     });
   });
 
@@ -446,6 +599,160 @@ function PersonalRecordsCard({
   );
 }
 
+function formatSecondsAsDuration(totalSeconds: number): string {
+  const safe = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  const mm = minutes.toString().padStart(hours > 0 ? 2 : 1, "0");
+  const ss = seconds.toString().padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/** Trim trailing zero for common cases (e.g. 3.0 → 3, 3.25 → 3.25). */
+function formatDistance(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toString();
+}
+
+function formatPacePerMile(timeSec: number, distanceMi: number): string | null {
+  if (distanceMi <= 0 || timeSec <= 0) return null;
+  const secPerMile = Math.round(timeSec / distanceMi);
+  return `${formatSecondsAsDuration(secPerMile)} / mi`;
+}
+
+interface PRStatContent {
+  headline: React.ReactNode;
+  subline?: React.ReactNode;
+  ariaDescription: string;
+}
+
+function renderPRStatContent(entry: PREntry): PRStatContent {
+  switch (entry.kind) {
+    case "weight":
+      return {
+        headline: (
+          <>
+            {entry.weight} lbs
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              × {entry.reps} rep{entry.reps !== 1 ? "s" : ""}
+            </span>
+          </>
+        ),
+        ariaDescription: `${entry.weight} lbs × ${entry.reps} reps`,
+      };
+    case "session-reps":
+      return {
+        headline: (
+          <>
+            {entry.totalReps} rep{entry.totalReps !== 1 ? "s" : ""}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              across {entry.sets} set{entry.sets !== 1 ? "s" : ""}
+            </span>
+          </>
+        ),
+        ariaDescription: `${entry.totalReps} total reps across ${entry.sets} set${
+          entry.sets !== 1 ? "s" : ""
+        }`,
+      };
+    case "running": {
+      const distanceLabel = `${formatDistance(entry.distanceMi)} mi`;
+      const timeLabel = formatSecondsAsDuration(entry.timeSec);
+      const pace = formatPacePerMile(entry.timeSec, entry.distanceMi);
+      return {
+        headline: (
+          <>
+            {timeLabel}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              for {distanceLabel}
+            </span>
+          </>
+        ),
+        subline: pace ? (
+          <span className="text-xs text-muted-foreground">{pace}</span>
+        ) : undefined,
+        ariaDescription: `${timeLabel} for ${distanceLabel}${pace ? ` (${pace})` : ""}`,
+      };
+    }
+    case "cardio-distance": {
+      const distanceLabel = `${formatDistance(entry.distanceMi)} mi`;
+      const timeLabel = formatSecondsAsDuration(entry.timeSec);
+      return {
+        headline: (
+          <>
+            {distanceLabel}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              in {timeLabel}
+            </span>
+          </>
+        ),
+        ariaDescription: `${distanceLabel} in ${timeLabel}`,
+      };
+    }
+    case "cardio-output": {
+      const outputLabel = `${formatDistance(entry.outputKJ)} kJ`;
+      const timeLabel = formatSecondsAsDuration(entry.timeSec);
+      return {
+        headline: (
+          <>
+            {outputLabel}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              in {timeLabel}
+            </span>
+          </>
+        ),
+        ariaDescription: `${outputLabel} in ${timeLabel}`,
+      };
+    }
+    case "swim": {
+      const yardsLabel = `${entry.totalYards.toLocaleString()} yd`;
+      const timeLabel =
+        entry.timeSec > 0 ? formatSecondsAsDuration(entry.timeSec) : null;
+      const setsLabel =
+        entry.sets > 0 ? `${entry.sets} set${entry.sets !== 1 ? "s" : ""}` : null;
+      const subParts = [setsLabel, timeLabel ? `${timeLabel} interval` : null]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        headline: (
+          <>
+            {yardsLabel}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              total
+            </span>
+          </>
+        ),
+        subline: subParts ? (
+          <span className="text-xs text-muted-foreground">{subParts}</span>
+        ) : undefined,
+        ariaDescription: `${yardsLabel} total${subParts ? ` (${subParts})` : ""}`,
+      };
+    }
+    case "duration": {
+      const timeLabel = formatSecondsAsDuration(entry.timeSec);
+      return {
+        headline: (
+          <>
+            {timeLabel}
+            <span className="text-sm font-normal text-muted-foreground">
+              {" "}
+              total
+            </span>
+          </>
+        ),
+        ariaDescription: `${timeLabel} total time`,
+      };
+    }
+  }
+}
+
 function PRStat({ label, entry }: { label: string; entry: PREntry | null }) {
   const labelEl = (
     <p className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -466,13 +773,8 @@ function PRStat({ label, entry }: { label: string; entry: PREntry | null }) {
     entry.workoutId
   )}&exercise=${encodeURIComponent(entry.exerciseId)}`;
   const dateLabel = format(new Date(entry.date), "MMM d, yyyy");
-
-  const ariaLabel =
-    entry.kind === "weight"
-      ? `View ${label} PR: ${entry.weight} lbs × ${entry.reps} reps on ${dateLabel}`
-      : `View ${label} PR: ${entry.totalReps} total reps across ${entry.sets} set${
-          entry.sets !== 1 ? "s" : ""
-        } on ${dateLabel}`;
+  const { headline, subline, ariaDescription } = renderPRStatContent(entry);
+  const ariaLabel = `View ${label} PR: ${ariaDescription} on ${dateLabel}`;
 
   return (
     <Link
@@ -481,23 +783,8 @@ function PRStat({ label, entry }: { label: string; entry: PREntry | null }) {
       className="block bg-muted/50 rounded p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       {labelEl}
-      {entry.kind === "weight" ? (
-        <p className="text-lg font-bold">
-          {entry.weight} lbs
-          <span className="text-sm font-normal text-muted-foreground">
-            {" "}
-            × {entry.reps} rep{entry.reps !== 1 ? "s" : ""}
-          </span>
-        </p>
-      ) : (
-        <p className="text-lg font-bold">
-          {entry.totalReps} rep{entry.totalReps !== 1 ? "s" : ""}
-          <span className="text-sm font-normal text-muted-foreground">
-            {" "}
-            across {entry.sets} set{entry.sets !== 1 ? "s" : ""}
-          </span>
-        </p>
-      )}
+      <p className="text-lg font-bold">{headline}</p>
+      {subline ? <div className="mt-0.5">{subline}</div> : null}
       <p className="text-xs text-muted-foreground mt-0.5">{dateLabel}</p>
     </Link>
   );
