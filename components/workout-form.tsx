@@ -2327,7 +2327,15 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
               <div className="space-y-2">
                 {curr.exerciseBreakdown.map((ex: any, i: number) => {
                   const prevEx = prev?.exerciseBreakdown?.find((p: any) => p.name === ex.name);
-                  const isCoreExercise = ex.name === "Core";
+                  const exerciseName = String(ex.name ?? "").trim();
+                  const normalizedExerciseName = exerciseName.toLowerCase();
+                  const isCoreExercise = normalizedExerciseName === "core";
+                  const isWalkingExercise = normalizedExerciseName === "walking";
+                  const shouldShowDistance =
+                    isCardio &&
+                    !isWalkingExercise &&
+                    !isCoreExercise &&
+                    Number(ex.totalDistance) > 0;
 
                   let vsLastNode: React.ReactNode = (
                     <span className="text-muted-foreground">—</span>
@@ -2338,7 +2346,7 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
                         const { label, tone } = describeCardioCoreChangeVsPrev(
                           ex,
                           prevEx,
-                          isCardio && ex.name !== "Walking",
+                          shouldShowDistance,
                           formatTime,
                           formatDistance
                         );
@@ -2377,12 +2385,6 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
                               <span className="text-muted-foreground">Time: </span>
                               <span className="font-medium">{formatTime(ex.totalTime) || "0:00"}</span>
                             </div>
-                            {isCardio && ex.name !== "Walking" && (
-                              <div>
-                                <span className="text-muted-foreground">Dist: </span>
-                                <span className="font-medium">{formatDistance(ex.totalDistance)}</span>
-                              </div>
-                            )}
                           </div>
                         ) : (
                           <div>

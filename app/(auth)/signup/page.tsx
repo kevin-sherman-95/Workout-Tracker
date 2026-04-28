@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function SignupPage() {
-  const { user, isLoading } = useUser();
+  const { user } = useUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -16,15 +16,10 @@ export default function SignupPage() {
     }
   }, [user, router]);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
-  // Redirect to Auth0 signup screen
+  // Render the sign-up UI immediately rather than gating on the auth probe —
+  // /signup is a public page and should never be stuck behind a "Loading..."
+  // state if the probe stalls (e.g. after the Auth0 logout redirect chain).
+  // If the probe resolves to an authed user, the effect above redirects.
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
