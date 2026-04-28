@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
-  const { user, isLoading, error } = useUser();
+  const { user, error } = useUser();
   const router = useRouter();
   const [isAuth0Configured, setIsAuth0Configured] = useState(true);
 
@@ -30,14 +30,11 @@ export default function LoginPage() {
     }
   }, [error]);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="text-muted-foreground">Loading...</div>
-      </div>
-    );
-  }
-
+  // Render the sign-in UI immediately. /login is a public page, so we should
+  // never block on the auth-state probe — if a session probe stalls (e.g. after
+  // the Auth0 logout redirect chain), the user would otherwise be stuck on a
+  // permanent "Loading..." screen. If the probe later resolves to an authed
+  // user, the effect above redirects to /dashboard.
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Card className="w-full max-w-md">
