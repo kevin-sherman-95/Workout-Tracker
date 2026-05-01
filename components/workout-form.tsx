@@ -802,7 +802,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             acc[we.exercise_id] = {
               exerciseId: we.exercise_id,
               sets: [],
-              restInterval: we.rest_interval?.toString() || "60", // Default to 60 seconds
+              restInterval: we.rest_interval?.toString() || "90", // Default to 90 seconds
             };
           }
           if (isCardioWorkout) {
@@ -875,7 +875,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       {
         exerciseId: defaultExerciseId,
         sets: [{ reps: 0, weight: 0, distance: 0, time: 0, swimSets: 1 }],
-        restInterval: "60", // Default to 60 seconds
+        restInterval: "90", // Default to 90 seconds
       },
     ]);
   };
@@ -1122,7 +1122,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           ? Math.max(1, Math.round(set.swimSets ?? 1))
           : isWalking
             ? Math.max(0, Math.round(set.pace ?? 0))
-            : parseInt(exerciseSet.restInterval) || 60,
+            : parseInt(exerciseSet.restInterval) || 90,
       }));
 
       if (workoutExercises.length > 0) {
@@ -1518,7 +1518,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
               ? Math.max(1, Math.round(set.swimSets ?? 1))
               : isWalking
                 ? Math.max(0, Math.round(set.pace ?? 0))
-                : parseInt(exercise.restInterval) || 60,
+                : parseInt(exercise.restInterval) || 90,
           };
         });
       });
@@ -2112,7 +2112,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                         Rest time between sets
                       </p>
                       <Select
-                        value={exerciseSet.restInterval || "60"}
+                        value={exerciseSet.restInterval || "90"}
                         onChange={(e) => updateRestInterval(exerciseIndex, e.target.value)}
                         className="w-full"
                       >
