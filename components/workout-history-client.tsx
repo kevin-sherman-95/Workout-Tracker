@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
-import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp } from "lucide-react";
+import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp, ArrowDownNarrowWide, ArrowUpNarrowWide } from "lucide-react";
 import type { WorkoutWithExercises, Exercise, WorkoutFocus } from "@/lib/types";
 
 /** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
@@ -94,6 +94,7 @@ export function WorkoutHistoryClient({
   const [deletingWorkoutId, setDeletingWorkoutId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [focusFilter, setFocusFilter] = useState<string>("all");
+  const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
   const [expandedWorkouts, setExpandedWorkouts] = useState<Set<string>>(new Set());
 
   const toggleWorkoutExpanded = (workoutId: string) => {
@@ -231,10 +232,14 @@ export function WorkoutHistoryClient({
       };
     });
 
-    // Sort by created_at descending (most recently inputted first)
-    workoutsWithExercises.sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    // Sort by workout_date descending (most recent workout day first),
+    // breaking ties with created_at so newer entries on the same day come first.
+    workoutsWithExercises.sort((a, b) => {
+      if (a.workout_date !== b.workout_date) {
+        return a.workout_date < b.workout_date ? 1 : -1;
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
     setWorkouts(workoutsWithExercises);
   }, []);
@@ -336,6 +341,20 @@ export function WorkoutHistoryClient({
 
   if (!selectedWorkoutId && focusFilter !== "all") {
     displayedWorkouts = displayedWorkouts.filter((w) => w.focus === focusFilter);
+  }
+
+  // Apply user-selected sort direction by workout_date, with created_at as a
+  // tiebreaker so multiple workouts on the same day stay in a stable order.
+  if (!selectedWorkoutId) {
+    displayedWorkouts = [...displayedWorkouts].sort((a, b) => {
+      if (a.workout_date !== b.workout_date) {
+        const cmp = a.workout_date < b.workout_date ? -1 : 1;
+        return sortDirection === "asc" ? cmp : -cmp;
+      }
+      const createdCmp =
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return sortDirection === "asc" ? createdCmp : -createdCmp;
+    });
   }
 
   // Calculate stats for filtered workouts
@@ -455,6 +474,31 @@ export function WorkoutHistoryClient({
                 Clear filter
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setSortDirection((prev) => (prev === "desc" ? "asc" : "desc"))
+              }
+              className="text-sm ml-auto"
+              aria-label={
+                sortDirection === "desc"
+                  ? "Sort by date: newest first. Click to show oldest first."
+                  : "Sort by date: oldest first. Click to show newest first."
+              }
+              title={
+                sortDirection === "desc"
+                  ? "Newest first — click to flip"
+                  : "Oldest first — click to flip"
+              }
+            >
+              {sortDirection === "desc" ? (
+                <ArrowDownNarrowWide className="mr-2 h-4 w-4" />
+              ) : (
+                <ArrowUpNarrowWide className="mr-2 h-4 w-4" />
+              )}
+              {sortDirection === "desc" ? "Newest first" : "Oldest first"}
+            </Button>
           </div>
 
           {workoutStats && (
