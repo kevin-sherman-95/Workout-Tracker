@@ -210,6 +210,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [showComparison, setShowComparison] = useState(false);
   const [currentStats, setCurrentStats] = useState<WorkoutStats | null>(null);
   const [previousStats, setPreviousStats] = useState<WorkoutStats | null>(null);
+  // Peloton output is meaningful only when compared at the same total ride time, so we
+  // track the most recent prior workout whose Peloton entry matches the current ride time.
+  const [previousPelotonComparison, setPreviousPelotonComparison] = useState<{
+    time: number;
+    output: number;
+    date: string;
+  } | null>(null);
 
   // Exercise history popup state
   interface ExerciseHistoryEntry {
@@ -1341,6 +1348,76 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     return computeWorkoutStats(exercisesData, data.workout_date, data.focus);
   };
 
+  // Find the most recent prior workout where Peloton was performed for the same total
+  // ride time as the just-saved workout. Used to compute a meaningful output (kJ) delta.
+  const fetchPreviousPelotonAtTime = async (
+    currentWorkoutId: string,
+    pelotonTime: number,
+    effectiveUserId: string,
+    isMockMode: boolean
+  ): Promise<{ time: number; output: number; date: string } | null> => {
+    if (pelotonTime <= 0) return null;
+
+    if (isMockMode) {
+      const pelotonExercise = exercises.find((e) => e.name === "Peloton");
+      if (!pelotonExercise) return null;
+
+      const mockWorkouts: any[] = JSON.parse(localStorage.getItem("mock-workouts") || "[]");
+      const mockWEs: any[] = JSON.parse(localStorage.getItem("mock-workout-exercises") || "[]");
+
+      const candidates = mockWorkouts
+        .filter((w: any) => w.user_id === effectiveUserId && w.id !== currentWorkoutId)
+        .sort((a: any, b: any) => new Date(b.workout_date).getTime() - new Date(a.workout_date).getTime());
+
+      for (const w of candidates) {
+        const sets = mockWEs.filter(
+          (we: any) => we.workout_id === w.id && we.exercise_id === pelotonExercise.id
+        );
+        if (sets.length === 0) continue;
+        const totalTime = sets.reduce((sum: number, s: any) => sum + (s.reps || 0), 0);
+        if (totalTime === pelotonTime) {
+          const totalOutput = sets.reduce((sum: number, s: any) => sum + (s.weight || 0), 0);
+          return { time: totalTime, output: totalOutput, date: w.workout_date };
+        }
+      }
+      return null;
+    }
+
+    const client = createClient();
+    const { data, error } = await client
+      .from("workout_exercises")
+      .select("reps, weight, workout:workouts!inner(id, workout_date, user_id), exercise:exercises!inner(name)")
+      .eq("workout.user_id", effectiveUserId)
+      .eq("exercise.name", "Peloton")
+      .neq("workout.id", currentWorkoutId);
+
+    if (error || !data) return null;
+
+    const byWorkout = new Map<string, { date: string; time: number; output: number }>();
+    for (const row of data as any[]) {
+      const wId = row.workout?.id;
+      if (!wId) continue;
+      const existing = byWorkout.get(wId);
+      if (existing) {
+        existing.time += row.reps || 0;
+        existing.output += row.weight || 0;
+      } else {
+        byWorkout.set(wId, {
+          date: row.workout.workout_date,
+          time: row.reps || 0,
+          output: row.weight || 0,
+        });
+      }
+    }
+
+    const matching = Array.from(byWorkout.values())
+      .filter((w) => w.time === pelotonTime)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    if (matching.length === 0) return null;
+    return matching[0];
+  };
+
   const buildCurrentStats = (
     exercisesToSave: ExerciseSet[],
     date: string,
@@ -1582,6 +1659,25 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         setPreviousStats(prev);
       } catch {
         setPreviousStats(null);
+      }
+
+      // For Peloton, output (kJ) only makes sense compared at the same ride time, so
+      // search history for the most recent prior workout with a matching-time ride.
+      const pelotonEntry = saved.exerciseBreakdown.find((ex) => ex.name === "Peloton");
+      if (pelotonEntry && pelotonEntry.totalTime > 0) {
+        try {
+          const pelotonPrev = await fetchPreviousPelotonAtTime(
+            workoutIdToUse!,
+            pelotonEntry.totalTime,
+            effectiveUserId,
+            isMockMode
+          );
+          setPreviousPelotonComparison(pelotonPrev);
+        } catch {
+          setPreviousPelotonComparison(null);
+        }
+      } else {
+        setPreviousPelotonComparison(null);
       }
 
       setLoading(false);
@@ -2190,6 +2286,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         <WorkoutComparisonOverlay
           currentStats={currentStats}
           previousStats={previousStats}
+          pelotonComparison={previousPelotonComparison}
           focus={focus}
           formatTime={formatTimeDisplay}
           onClose={() => {
@@ -2282,9 +2379,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   );
 }
 
-function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTime, onClose }: {
+function WorkoutComparisonOverlay({ currentStats, previousStats, pelotonComparison, focus, formatTime, onClose }: {
   currentStats: NonNullable<ReturnType<typeof Object>>;
   previousStats: NonNullable<ReturnType<typeof Object>> | null;
+  pelotonComparison: { time: number; output: number; date: string } | null;
   focus: string;
   formatTime: (s: number) => string;
   onClose: () => void;
@@ -2294,6 +2392,11 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
   const isCardio = focus === "Cardio";
 
   const formatDistance = (d: number) => d % 1 === 0 ? d.toString() : d.toFixed(1);
+  const formatOutput = (kj: number) => Math.round(kj).toString();
+  const formatRideMinutes = (seconds: number) => {
+    if (seconds % 60 === 0) return `${seconds / 60}-min`;
+    return `${(seconds / 60).toFixed(1)}-min`;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -2331,11 +2434,61 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, focus, formatTi
                   const normalizedExerciseName = exerciseName.toLowerCase();
                   const isCoreExercise = normalizedExerciseName === "core";
                   const isWalkingExercise = normalizedExerciseName === "walking";
+                  const isPelotonExercise = exerciseName === "Peloton";
                   const shouldShowDistance =
                     isCardio &&
                     !isWalkingExercise &&
                     !isCoreExercise &&
+                    !isPelotonExercise &&
                     Number(ex.totalDistance) > 0;
+
+                  // Peloton has a dedicated layout that compares output (kJ) only
+                  // against a prior ride at the exact same total time.
+                  if (isPelotonExercise) {
+                    const currentOutput = Number(ex.totalDistance) || 0;
+                    const currentTime = Number(ex.totalTime) || 0;
+
+                    let pelotonVsLast: React.ReactNode = (
+                      <span className="text-muted-foreground">
+                        No prior {formatRideMinutes(currentTime)} ride
+                      </span>
+                    );
+                    if (pelotonComparison && pelotonComparison.time === currentTime) {
+                      const diff = currentOutput - pelotonComparison.output;
+                      if (diff === 0) {
+                        pelotonVsLast = (
+                          <span className={changeToneClass("neutral")}>Same as last time</span>
+                        );
+                      } else {
+                        const sign = diff > 0 ? "+" : "-";
+                        pelotonVsLast = (
+                          <span className={changeToneClass(diff > 0 ? "good" : "bad")}>
+                            {sign}{formatOutput(Math.abs(diff))} kJ
+                          </span>
+                        );
+                      }
+                    }
+
+                    return (
+                      <div key={i} className="bg-muted/30 rounded-lg p-3">
+                        <p className="font-medium text-sm mb-2">{ex.name}</p>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-muted-foreground">Time: </span>
+                            <span className="font-medium">{formatTime(currentTime) || "0:00"}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Output: </span>
+                            <span className="font-medium">{formatOutput(currentOutput)} kJ</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">vs last: </span>
+                            {pelotonVsLast}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
 
                   let vsLastNode: React.ReactNode = (
                     <span className="text-muted-foreground">—</span>
