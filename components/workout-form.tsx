@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2, Check, Save, ChevronDown, Clock, Trophy, X, ArrowRight, Info } from "lucide-react";
 import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
+import { sortWorkoutExerciseRows } from "@/lib/workout-exercise-order";
 
 interface ExerciseUsage {
   exercise_id: string;
@@ -794,7 +795,8 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         // Group exercises by exercise_id and convert to ExerciseSet format
         // For cardio workouts and Abs, weight stores distance and reps stores time
         const isCardioWorkout = (workout.focus as WorkoutFocus) === "Cardio";
-        const exercisesByExerciseId = workoutExercises.reduce((acc, we) => {
+        const sortedWorkoutExercises = sortWorkoutExerciseRows(workoutExercises);
+        const exercisesByExerciseId = sortedWorkoutExercises.reduce((acc, we) => {
           // Must match per-exercise save logic (saveExercise): only "Core" uses time→reps column mapping.
           // Do not treat weight===0 as Core — bodyweight exercises (e.g. Pull-ups) store reps in `reps`.
           const exerciseName = (
@@ -1606,12 +1608,13 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             ? JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]')
             : [];
           // Add exercise_name only for mock mode (localStorage) - not in Supabase schema
+          const insertBaseMs = Date.now();
           const newExercises = workoutExercises.map((we, idx) => {
             const exerciseName = exercises.find(e => e.id === we.exercise_id)?.name || 'Unknown Exercise';
             return {
               ...we,
-              id: `mock-we-${Date.now()}-${idx}`,
-              created_at: new Date().toISOString(),
+              id: `mock-we-${insertBaseMs}-${idx}`,
+              created_at: new Date(insertBaseMs + idx).toISOString(),
               exercise_name: exerciseName,
             };
           });
@@ -1620,9 +1623,15 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
             localStorage.setItem('mock-workout-exercises', JSON.stringify(mockWorkoutExercises));
           }
         } else {
+          const insertBaseMs = Date.now();
           const { error: exercisesError } = await client
             .from("workout_exercises")
-            .insert(workoutExercises);
+            .insert(
+              workoutExercises.map((we, idx) => ({
+                ...we,
+                created_at: new Date(insertBaseMs + idx).toISOString(),
+              }))
+            );
 
           if (exercisesError) {
             console.error("Supabase save error:", exercisesError);

@@ -9,6 +9,10 @@ import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp, ArrowDownNarrowWide, ArrowUpNarrowWide } from "lucide-react";
 import type { WorkoutWithExercises, Exercise, WorkoutFocus } from "@/lib/types";
+import {
+  groupWorkoutExercisesInPerformOrder,
+  sortWorkoutExerciseRows,
+} from "@/lib/workout-exercise-order";
 
 /** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
 function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
@@ -17,7 +21,7 @@ function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
   }
   const orderedUnique: string[] = [];
   const seen = new Set<string>();
-  for (const we of workout.workout_exercises) {
+  for (const we of sortWorkoutExerciseRows(workout.workout_exercises)) {
     const name = we.exercise?.name?.trim();
     if (!name) continue;
     if (seen.has(name)) continue;
@@ -228,7 +232,7 @@ export function WorkoutHistoryClient({
 
       return {
         ...workout,
-        workout_exercises: workoutExercises,
+        workout_exercises: sortWorkoutExerciseRows(workoutExercises),
       };
     });
 
@@ -540,36 +544,8 @@ export function WorkoutHistoryClient({
       <div className="space-y-4">
         {displayedWorkouts.map((workout) => {
           const isCardioWorkout = workout.focus === "Cardio";
-          const exercisesByExerciseId = workout.workout_exercises.reduce(
-            (acc, we) => {
-              if (!we.exercise) return acc;
-              const exerciseId = we.exercise.id;
-              if (!acc[exerciseId]) {
-                acc[exerciseId] = {
-                  exercise: we.exercise,
-                  sets: [],
-                };
-              }
-              acc[exerciseId].sets.push({
-                set_number: we.set_number,
-                reps: we.reps,
-                weight: we.weight,
-                rest_interval: we.rest_interval,
-              });
-              return acc;
-            },
-            {} as Record<
-              string,
-              {
-                exercise: { id: string; name: string };
-                sets: Array<{
-                  set_number: number;
-                  reps: number;
-                  weight: number;
-                  rest_interval?: number;
-                }>;
-              }
-            >
+          const exercisesInPerformOrder = groupWorkoutExercisesInPerformOrder(
+            workout.workout_exercises
           );
 
           const isConfirmingDelete = deletingWorkoutId === workout.id;
@@ -640,7 +616,7 @@ export function WorkoutHistoryClient({
               </CardHeader>
               {isExpanded && (
               <CardContent className="space-y-4">
-                {Object.values(exercisesByExerciseId).map(({ exercise, sets }) => {
+                {exercisesInPerformOrder.map(({ exercise, sets }) => {
                   const isCoreExercise = exercise.name === "Core";
                   const isPullups = exercise.name === "Pull-ups";
                   // Check if this is a Peloton exercise to show output instead of distance
