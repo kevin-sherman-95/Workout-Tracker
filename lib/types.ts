@@ -29,6 +29,7 @@ export interface WorkoutExercise {
   reps: number;
   weight: number;
   rest_interval?: number;
+  created_at?: string;
   exercise?: Exercise;
 }
 

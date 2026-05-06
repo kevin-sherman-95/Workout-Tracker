@@ -22,7 +22,15 @@ async function getWorkouts() {
       `)
       .eq("user_id", userId)
       .order("workout_date", { ascending: false })
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false })
+      .order("created_at", {
+        ascending: true,
+        referencedTable: "workout_exercises",
+      })
+      .order("set_number", {
+        ascending: true,
+        referencedTable: "workout_exercises",
+      });
 
     return workouts as WorkoutWithExercises[] | null;
   } catch (error) {
