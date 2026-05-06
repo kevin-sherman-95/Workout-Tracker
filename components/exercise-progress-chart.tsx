@@ -17,10 +17,11 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import { format, startOfMonth, startOfYear } from "date-fns";
 import type { WorkoutWithExercises, WorkoutFocus } from "@/lib/types";
 
@@ -84,6 +85,156 @@ interface DotHoverState {
   clientY: number;
 }
 
+interface SelectedChartDot {
+  workoutId: string;
+  exerciseId: string | null;
+  exerciseName: string;
+}
+
+function parseWorkoutDate(dateString: string): Date {
+  const parts = dateString.split("-");
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    return new Date(year, month, day);
+  }
+  return new Date(dateString);
+}
+
+function ProgressDotWorkoutModal({
+  selection,
+  workouts,
+  onClose,
+}: {
+  selection: SelectedChartDot;
+  workouts: WorkoutWithExercises[];
+  onClose: () => void;
+}) {
+  const workout = workouts.find((w) => w.id === selection.workoutId);
+  if (!workout) {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        onClick={onClose}
+      >
+        <div
+          className="bg-card border rounded-xl shadow-xl w-full max-w-md p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="text-sm text-muted-foreground">Workout not found.</p>
+          <Button type="button" variant="outline" className="mt-4" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const workoutDateLabel = format(
+    parseWorkoutDate(workout.workout_date),
+    "EEEE, MMMM d, yyyy"
+  );
+  const historyHref =
+    selection.exerciseId != null
+      ? `/dashboard/history?workout=${encodeURIComponent(workout.id)}&exercise=${encodeURIComponent(selection.exerciseId)}`
+      : `/dashboard/history?workout=${encodeURIComponent(workout.id)}`;
+
+  const isBodyWeight = selection.exerciseName === BODY_WEIGHT_METRIC;
+  const exerciseRows = isBodyWeight
+    ? []
+    : workout.workout_exercises
+        .filter((we) => {
+          if (!we.exercise) return false;
+          if (selection.exerciseId) return we.exercise.id === selection.exerciseId;
+          return we.exercise.name.trim() === selection.exerciseName;
+        })
+        .sort((a, b) => a.set_number - b.set_number);
+
+  const isPullups = selection.exerciseName === "Pull-ups";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border rounded-xl shadow-xl w-full max-w-md max-h-[80vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 p-4 border-b">
+          <div>
+            <h3 className="font-semibold text-lg">{selection.exerciseName}</h3>
+            <p className="text-sm text-muted-foreground mt-1">{workoutDateLabel}</p>
+            <p className="text-sm text-muted-foreground">{workout.focus}</p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="p-4 space-y-4">
+          {isBodyWeight ? (
+            <p className="text-sm">
+              <span className="font-medium">Body weight:</span>{" "}
+              {workout.body_weight != null && Number(workout.body_weight) > 0
+                ? `${workout.body_weight} lbs`
+                : "—"}
+            </p>
+          ) : exerciseRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No sets logged for this exercise.</p>
+          ) : (
+            <div className="bg-muted/30 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border/50">
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                      Set
+                    </th>
+                    {!isPullups ? (
+                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                        Weight (lbs)
+                      </th>
+                    ) : null}
+                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">
+                      Reps
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {exerciseRows.map((set, j) => (
+                    <tr
+                      key={set.set_number}
+                      className={
+                        j < exerciseRows.length - 1 ? "border-b border-border/30" : ""
+                      }
+                    >
+                      <td className="py-1.5 px-3">{set.set_number}</td>
+                      {!isPullups ? <td className="py-1.5 px-3">{set.weight}</td> : null}
+                      <td className="py-1.5 px-3">{set.reps}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Link href={historyHref}>
+            <Button type="button" className="w-full">
+              View full workout
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SingleExerciseTooltipCard({
   dateLabel,
   exerciseName,
@@ -114,7 +265,7 @@ function SingleExerciseTooltipCard({
           </div>
         ) : null}
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">Click the dot to open this workout</p>
+      <p className="mt-2 text-xs text-muted-foreground">Click the dot for workout details</p>
     </div>
   );
 }
@@ -128,6 +279,7 @@ function LineExerciseDot({
   exerciseName,
   strokeColor,
   setDotHover,
+  onSelectWorkout,
 }: {
   cx?: number;
   cy?: number;
@@ -136,9 +288,8 @@ function LineExerciseDot({
   exerciseName: string;
   strokeColor: string;
   setDotHover: Dispatch<SetStateAction<DotHoverState | null>>;
+  onSelectWorkout: (selection: SelectedChartDot) => void;
 }) {
-  const router = useRouter();
-
   if (cx == null || cy == null || !payload) return null;
   if (typeof value !== "number" || Number.isNaN(value)) return null;
 
@@ -150,19 +301,17 @@ function LineExerciseDot({
     prev.exerciseName === exerciseName &&
     prev.dateLabel === dateLabel;
 
-  const goToWorkout = (e: React.MouseEvent) => {
+  const openWorkoutDetails = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     const wid = payload[widKey(exerciseName)];
     const eid = payload[eidKey(exerciseName)];
     if (typeof wid !== "string" || !wid) return;
-    const base = `/dashboard/history?workout=${encodeURIComponent(wid)}`;
-    // Body weight points aren't tied to an exercise row — just open the workout.
-    const url =
-      typeof eid === "string" && eid
-        ? `${base}&exercise=${encodeURIComponent(eid)}`
-        : base;
-    router.push(url);
+    onSelectWorkout({
+      workoutId: wid,
+      exerciseId: typeof eid === "string" && eid ? eid : null,
+      exerciseName,
+    });
   };
 
   return (
@@ -173,7 +322,7 @@ function LineExerciseDot({
         r={16}
         fill="transparent"
         style={{ cursor: "pointer" }}
-        onClick={goToWorkout}
+        onClick={openWorkoutDetails}
         onMouseEnter={(e) =>
           setDotHover({
             dateLabel,
@@ -309,6 +458,8 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
   const [timeView, setTimeView] = useState<TimeView>("daily");
 
   const [dotHover, setDotHover] = useState<DotHoverState | null>(null);
+  const [selectedChartDot, setSelectedChartDot] =
+    useState<SelectedChartDot | null>(null);
 
   const exerciseNameToMuscleGroup = useMemo(() => {
     const map = new Map<string, string>();
@@ -348,20 +499,6 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     // Triceps.
     setSelectedExercises(new Set(focusExerciseNames));
   }, [workoutTypePreset, focusExerciseNames]);
-
-  // Helper function to parse date safely (handles YYYY-MM-DD format)
-  const parseWorkoutDate = (dateString: string): Date => {
-    // If it's already a date string in YYYY-MM-DD format, parse it correctly
-    const parts = dateString.split('-');
-    if (parts.length === 3) {
-      // Create date in UTC to avoid timezone issues, then convert to local
-      const year = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
-      const day = parseInt(parts[2], 10);
-      return new Date(year, month, day);
-    }
-    return new Date(dateString);
-  };
 
   // Transform workouts into chart data based on selected time view
   // Each workout date becomes a data point (workouts on same date are aggregated)
@@ -709,6 +846,10 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
                             exerciseName={exerciseName}
                             strokeColor={strokeColor}
                             setDotHover={setDotHover}
+                            onSelectWorkout={(selection) => {
+                              setDotHover(null);
+                              setSelectedChartDot(selection);
+                            }}
                           />
                         )}
                         activeDot={false}
@@ -735,6 +876,16 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
                       row={dotHover.row}
                     />
                   </div>,
+                  document.body
+                )}
+              {typeof document !== "undefined" &&
+                selectedChartDot &&
+                createPortal(
+                  <ProgressDotWorkoutModal
+                    selection={selectedChartDot}
+                    workouts={workouts}
+                    onClose={() => setSelectedChartDot(null)}
+                  />,
                   document.body
                 )}
             </div>
