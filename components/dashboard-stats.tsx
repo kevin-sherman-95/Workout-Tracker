@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, TrendingUp } from "lucide-react";
-
-// Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
-const parseLocalDate = (dateString: string): Date => {
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day); // month is 0-indexed
-};
+import {
+  getMonthStartLocal,
+  getWeekStartLocal,
+  getYtdStartLocal,
+  parseWorkoutLocalDate,
+} from "@/lib/workout-date-periods";
 
 interface DashboardStatsProps {
   serverWorkouts: any[] | null;
@@ -26,24 +27,16 @@ export function DashboardStats({ serverWorkouts, serverYtdWorkouts }: DashboardS
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
-    const ytdStart = new Date(today.getFullYear(), 0, 1);
-    ytdStart.setHours(0, 0, 0, 0);
-
-    const dow = today.getDay();
-    const daysFromMonday = dow === 0 ? 6 : dow - 1;
-    const weekStart = new Date(today);
-    weekStart.setDate(today.getDate() - daysFromMonday);
-    weekStart.setHours(0, 0, 0, 0);
-
-    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    monthStart.setHours(0, 0, 0, 0);
+    const ytdStart = getYtdStartLocal(today);
+    const weekStart = getWeekStartLocal(today);
+    const monthStart = getMonthStartLocal(today);
 
     let ytdCount = 0;
     let thisWeekCount = 0;
     let thisMonthCount = 0;
     for (const w of workouts) {
       if (!w?.workout_date) continue;
-      const workoutDate = parseLocalDate(w.workout_date);
+      const workoutDate = parseWorkoutLocalDate(w.workout_date);
       if (workoutDate > today) continue;
       if (workoutDate >= ytdStart) ytdCount++;
       if (workoutDate >= weekStart) thisWeekCount++;
@@ -133,37 +126,46 @@ export function DashboardStats({ serverWorkouts, serverYtdWorkouts }: DashboardS
     }
   }, []);
 
+  const statCardClassName =
+    "block rounded-lg transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
   return (
     <>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Workouts (YTD)</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{ytdWorkouts}</div>
-        </CardContent>
-      </Card>
+      <Link href="/dashboard/history" className={statCardClassName}>
+        <Card className="h-full cursor-pointer">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Workouts (YTD)</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{ytdWorkouts}</div>
+          </CardContent>
+        </Card>
+      </Link>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">This Week</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{thisWeekWorkouts}</div>
-        </CardContent>
-      </Card>
+      <Link href="/dashboard/history?period=week" className={statCardClassName}>
+        <Card className="h-full cursor-pointer">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">This Week</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{thisWeekWorkouts}</div>
+          </CardContent>
+        </Card>
+      </Link>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">This Month</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{thisMonthWorkouts}</div>
-        </CardContent>
-      </Card>
+      <Link href="/dashboard/history?period=month" className={statCardClassName}>
+        <Card className="h-full cursor-pointer">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">This Month</CardTitle>
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{thisMonthWorkouts}</div>
+          </CardContent>
+        </Card>
+      </Link>
     </>
   );
 }

@@ -1,6 +1,7 @@
 import { getSupabaseWithUser } from "@/lib/supabase/server";
 import { WorkoutHistoryClient } from "@/components/workout-history-client";
 import type { WorkoutWithExercises } from "@/lib/types";
+import type { WorkoutHistoryPeriod } from "@/lib/workout-date-periods";
 
 async function getWorkouts() {
   const { supabase, userId } = await getSupabaseWithUser();
@@ -39,20 +40,29 @@ async function getWorkouts() {
   }
 }
 
+function parseHistoryPeriod(
+  value: string | undefined
+): WorkoutHistoryPeriod | undefined {
+  if (value === "week" || value === "month") return value;
+  return undefined;
+}
+
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: { workout?: string; exercise?: string };
+  searchParams: { workout?: string; exercise?: string; period?: string };
 }) {
   const workouts = await getWorkouts();
   const selectedWorkoutId = searchParams?.workout;
   const highlightExerciseId = searchParams?.exercise;
+  const historyPeriod = parseHistoryPeriod(searchParams?.period);
 
   return (
     <WorkoutHistoryClient
       serverWorkouts={workouts}
       selectedWorkoutId={selectedWorkoutId}
       highlightExerciseId={highlightExerciseId}
+      historyPeriod={historyPeriod}
     />
   );
 }

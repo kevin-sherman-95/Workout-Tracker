@@ -13,6 +13,10 @@ import {
   groupWorkoutExercisesInPerformOrder,
   sortWorkoutExerciseRows,
 } from "@/lib/workout-exercise-order";
+import {
+  isWorkoutDateInHistoryPeriod,
+  type WorkoutHistoryPeriod,
+} from "@/lib/workout-date-periods";
 
 /** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
 function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
@@ -61,15 +65,17 @@ function formatRestInterval(seconds: number): string {
 }
 
 /**
- * Human-readable rest between sets. For Swimming, `rest_interval` is set count — do not show as rest.
+ * Human-readable rest between sets. Omitted for Cardio workouts.
+ * For Swimming, `rest_interval` is set count — do not show as rest.
  * For Walking, `rest_interval` stores pace (sec/mi) — do not show as rest.
  */
 function getRestBetweenSetsLabel(
   sets: Array<{ rest_interval?: number }>,
+  isCardioWorkout: boolean,
   isSwimming: boolean,
   isWalking: boolean
 ): string | null {
-  if (isSwimming || isWalking) return null;
+  if (isCardioWorkout || isSwimming || isWalking) return null;
   const raw = sets
     .map((s) => s.rest_interval)
     .filter((r): r is number => typeof r === "number" && r > 0);
@@ -86,12 +92,15 @@ interface WorkoutHistoryClientProps {
   selectedWorkoutId?: string;
   /** When opening from progress chart, scroll to this exercise block */
   highlightExerciseId?: string;
+  /** When set, only workouts in the current calendar week or month are shown. */
+  historyPeriod?: WorkoutHistoryPeriod;
 }
 
 export function WorkoutHistoryClient({
   serverWorkouts,
   selectedWorkoutId,
   highlightExerciseId,
+  historyPeriod,
 }: WorkoutHistoryClientProps) {
   const [workouts, setWorkouts] = useState<WorkoutWithExercises[] | null>(serverWorkouts);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -347,6 +356,19 @@ export function WorkoutHistoryClient({
     displayedWorkouts = displayedWorkouts.filter((w) => w.focus === focusFilter);
   }
 
+  if (!selectedWorkoutId && historyPeriod) {
+    displayedWorkouts = displayedWorkouts.filter((w) =>
+      isWorkoutDateInHistoryPeriod(w.workout_date, historyPeriod)
+    );
+  }
+
+  const historyPeriodLabel =
+    historyPeriod === "week"
+      ? "this week"
+      : historyPeriod === "month"
+        ? "this month"
+        : null;
+
   // Apply user-selected sort direction by workout_date, with created_at as a
   // tiebreaker so multiple workouts on the same day stay in a stable order.
   if (!selectedWorkoutId) {
@@ -448,6 +470,15 @@ export function WorkoutHistoryClient({
         </div>
       )}
 
+      {!selectedWorkoutId && historyPeriodLabel && (
+        <p className="text-sm text-muted-foreground">
+          Showing workouts from {historyPeriodLabel}.{" "}
+          <Link href="/dashboard/history" className="text-primary hover:underline">
+            Show all workouts
+          </Link>
+        </p>
+      )}
+
       {!selectedWorkoutId && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
@@ -525,18 +556,27 @@ export function WorkoutHistoryClient({
         </div>
       )}
 
-      {displayedWorkouts.length === 0 && focusFilter !== "all" && (
+      {displayedWorkouts.length === 0 &&
+        !selectedWorkoutId &&
+        (focusFilter !== "all" || historyPeriodLabel) && (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">
-              No workouts found for &quot;{focusFilter}&quot;
+              {focusFilter !== "all" && historyPeriodLabel
+                ? `No workouts found for "${focusFilter}" from ${historyPeriodLabel}.`
+                : focusFilter !== "all"
+                  ? `No workouts found for "${focusFilter}".`
+                  : `No workouts logged ${historyPeriodLabel}.`}
             </p>
-            <Button 
-              variant="outline" 
-              onClick={() => setFocusFilter("all")}
-            >
-              Show all workouts
-            </Button>
+            {focusFilter !== "all" ? (
+              <Button variant="outline" onClick={() => setFocusFilter("all")}>
+                Clear focus filter
+              </Button>
+            ) : (
+              <Link href="/dashboard/history">
+                <Button variant="outline">Show all workouts</Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       )}
@@ -629,6 +669,7 @@ export function WorkoutHistoryClient({
 
                   const restBetweenSetsLabel = getRestBetweenSetsLabel(
                     sets,
+                    isCardioWorkout,
                     isSwimming,
                     isWalking
                   );
