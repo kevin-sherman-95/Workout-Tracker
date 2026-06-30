@@ -609,11 +609,11 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
       // Format date based on time view
       let dateLabel: string;
       if (timeView === "monthly") {
-        // For monthly view, show month and day
-        dateLabel = format(dateValue, "MMM d");
+        // For monthly view, show numeric month/day (e.g. 12/20)
+        dateLabel = format(dateValue, "M/d");
       } else {
-        // For daily and YTD views, show full date
-        dateLabel = format(dateValue, "MMM d, yyyy");
+        // For daily and YTD views, show numeric date (e.g. 12/20/25)
+        dateLabel = format(dateValue, "M/d/yy");
       }
       
       const dataPoint: ExerciseDataPoint = {
@@ -691,6 +691,39 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     ? focusExerciseNames.filter((name) => selectedExercises.has(name))
     : Array.from(selectedExercises);
   const selectedExercisesArray = visibleSelectedExercises;
+
+  // Zoom the Y axis into the range the data actually occupies instead of
+  // always anchoring at 0. e.g. body weight fluctuating 150–200 should not
+  // waste half the chart showing 0–100.
+  const yDomain = useMemo<[number | "auto", number | "auto"]>(() => {
+    let min = Infinity;
+    let max = -Infinity;
+    for (const row of chartData) {
+      for (const exerciseName of selectedExercisesArray) {
+        const value = row[exerciseName];
+        if (typeof value === "number" && !Number.isNaN(value)) {
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
+      }
+    }
+
+    if (!Number.isFinite(min) || !Number.isFinite(max)) {
+      return [0, "auto"];
+    }
+
+    // Keep a from-zero baseline when the spread already starts near zero,
+    // since that's the more honest framing for small numbers.
+    if (min <= max * 0.15) {
+      return [0, "auto"];
+    }
+
+    const range = max - min || Math.max(max * 0.1, 1);
+    const padding = range * 0.15;
+    const lower = Math.max(0, Math.floor((min - padding) / 5) * 5);
+    const upper = Math.ceil((max + padding) / 5) * 5;
+    return [lower, upper];
+  }, [chartData, selectedExercisesArray]);
 
   return (
     <div className="space-y-4">
@@ -828,6 +861,8 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
                     interval="preserveStartEnd"
                   />
                   <YAxis
+                    domain={yDomain}
+                    allowDecimals={false}
                     label={{ value: "Weight (lbs)", angle: -90, position: "insideLeft" }}
                   />
                   <Legend />
