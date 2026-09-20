@@ -3,6 +3,7 @@ import {
   authorizeWorkoutApi,
   queryWorkouts,
   serializeWorkout,
+  workoutApiEnvelope,
 } from "@/lib/workout-api";
 
 export const dynamic = "force-dynamic";
@@ -28,5 +29,7 @@ export async function GET(
     return NextResponse.json({ error: "Workout not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ workout: serializeWorkout(workout) });
+  return NextResponse.json(
+    workoutApiEnvelope({ workout: serializeWorkout(workout) })
+  );
 }

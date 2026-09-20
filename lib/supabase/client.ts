@@ -106,6 +106,9 @@ function createMockClient() {
           }
           return Promise.resolve({ data: items[0] || null, error: null });
         },
+        maybeSingle() {
+          return builder.single();
+        },
         insert: (data: any) => {
           const insertBuilder = createBuilder(currentFilters);
           insertBuilder.select = () => insertBuilder;

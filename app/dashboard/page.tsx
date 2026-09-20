@@ -6,7 +6,9 @@ import { Plus } from "lucide-react";
 import { format } from "date-fns";
 import { WorkoutCalendar } from "@/components/workout-calendar";
 import { DashboardStats } from "@/components/dashboard-stats";
+import { DashboardBodyWeight } from "@/components/dashboard-body-weight";
 import { DbStatusBanner } from "@/components/db-status-banner";
+import { getPacificPeriodBounds } from "@/lib/pacific-dates";
 
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
 const parseLocalDate = (dateString: string): Date => {
@@ -34,26 +36,21 @@ export default async function DashboardPage() {
     if (userId) {
       const workoutsResult = await supabase
         .from("workouts")
-        .select("id, workout_date, focus, created_at")
+        .select("id, workout_date, focus, created_at, body_weight")
         .eq("user_id", userId)
         .order("workout_date", { ascending: false })
         .limit(5);
       workouts = workoutsResult?.data ?? [];
 
-      // Get all workouts for calendar
+      // Get all workouts for calendar + body-weight snippet
       const allWorkoutsResult = await supabase
         .from("workouts")
-        .select("id, workout_date, focus, created_at")
+        .select("id, workout_date, focus, created_at, body_weight")
         .eq("user_id", userId)
         .order("workout_date", { ascending: true });
       allWorkouts = allWorkoutsResult?.data ?? [];
 
-      const now = new Date();
-      const y = now.getFullYear();
-      const mo = String(now.getMonth() + 1).padStart(2, "0");
-      const da = String(now.getDate()).padStart(2, "0");
-      const todayStr = `${y}-${mo}-${da}`;
-      const yearStartStr = `${y}-01-01`;
+      const { today: todayStr, ytdStart: yearStartStr } = getPacificPeriodBounds();
 
       const countResult = await supabase
         .from("workouts")
@@ -88,11 +85,12 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <DashboardStats
           serverWorkouts={allWorkouts}
           serverYtdWorkouts={ytdWorkouts}
         />
+        <DashboardBodyWeight serverWorkouts={allWorkouts} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -115,6 +113,10 @@ export default async function DashboardPage() {
                       <p className="font-medium">{workout.focus}</p>
                       <p className="text-sm text-muted-foreground">
                         {format(parseLocalDate(workout.workout_date), "MMMM d, yyyy")}
+                        {workout.body_weight != null &&
+                        Number(workout.body_weight) > 0
+                          ? ` · ${workout.body_weight} lb`
+                          : ""}
                       </p>
                     </div>
                     <Link href={`/dashboard/history?workout=${workout.id}`}>

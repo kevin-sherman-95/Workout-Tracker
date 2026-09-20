@@ -15,8 +15,10 @@ import {
   YAxis,
   CartesianGrid,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { BODY_WEIGHT_TARGET_LB } from "@/lib/body-weight";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -256,7 +258,9 @@ function SingleExerciseTooltipCard({
       <div className="mt-1 space-y-0.5">
         <div>
           <span className="font-bold text-foreground">{exerciseName}</span>
-          <span className="text-muted-foreground">: {weight} lbs</span>
+          <span className="text-muted-foreground">
+            : {weight} {exerciseName === BODY_WEIGHT_METRIC ? "lb body weight" : "lbs"}
+          </span>
         </div>
         {reps != null ? (
           <div>
@@ -708,13 +712,21 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
       }
     }
 
+    const showingBodyWeight = selectedExercisesArray.includes(BODY_WEIGHT_METRIC);
+    if (showingBodyWeight) {
+      min = Math.min(min, BODY_WEIGHT_TARGET_LB);
+      max = Math.max(max, BODY_WEIGHT_TARGET_LB);
+    }
+
     if (!Number.isFinite(min) || !Number.isFinite(max)) {
-      return [0, "auto"];
+      return showingBodyWeight
+        ? [Math.min(BODY_WEIGHT_TARGET_LB - 10, 170), BODY_WEIGHT_TARGET_LB + 10]
+        : [0, "auto"];
     }
 
     // Keep a from-zero baseline when the spread already starts near zero,
     // since that's the more honest framing for small numbers.
-    if (min <= max * 0.15) {
+    if (!showingBodyWeight && min <= max * 0.15) {
       return [0, "auto"];
     }
 
@@ -848,6 +860,11 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
           ) : null}
 
           {/* Chart */}
+          {selectedExercisesArray.includes(BODY_WEIGHT_METRIC) ? (
+            <p className="text-xs text-muted-foreground mb-2">
+              Body weight in pounds (lb). Dashed line is the {BODY_WEIGHT_TARGET_LB} lb target.
+            </p>
+          ) : null}
           {selectedExercisesArray.length > 0 ? (
             <div className="w-full h-[500px]">
               <ResponsiveContainer width="100%" height="100%">
@@ -863,9 +880,30 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
                   <YAxis
                     domain={yDomain}
                     allowDecimals={false}
-                    label={{ value: "Weight (lbs)", angle: -90, position: "insideLeft" }}
+                    label={{
+                      value:
+                        selectedExercisesArray.length === 1 &&
+                        selectedExercisesArray[0] === BODY_WEIGHT_METRIC
+                          ? "Body weight (lbs)"
+                          : "Weight (lbs)",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
                   />
                   <Legend />
+                  {selectedExercisesArray.includes(BODY_WEIGHT_METRIC) ? (
+                    <ReferenceLine
+                      y={BODY_WEIGHT_TARGET_LB}
+                      stroke="#16a34a"
+                      strokeDasharray="6 4"
+                      label={{
+                        value: `Target ${BODY_WEIGHT_TARGET_LB} lb`,
+                        position: "insideTopRight",
+                        fill: "#16a34a",
+                        fontSize: 12,
+                      }}
+                    />
+                  ) : null}
                   {selectedExercisesArray.map((exerciseName, index) => {
                     const strokeColor = colors[index % colors.length];
                     return (

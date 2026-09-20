@@ -4,16 +4,11 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Calendar, TrendingUp } from "lucide-react";
-import {
-  getMonthStartLocal,
-  getWeekStartLocal,
-  getYtdStartLocal,
-  parseWorkoutLocalDate,
-} from "@/lib/workout-date-periods";
+import { getPacificPeriodBounds } from "@/lib/pacific-dates";
 
 interface DashboardStatsProps {
   serverWorkouts: any[] | null;
-  /** Count from server: workouts with workout_date in [Jan 1, today] (local calendar year). */
+  /** Count from server: workouts with workout_date in [Jan 1, today] (Pacific calendar year). */
   serverYtdWorkouts: number;
 }
 
@@ -22,22 +17,16 @@ export function DashboardStats({ serverWorkouts, serverYtdWorkouts }: DashboardS
   const [thisWeekWorkouts, setThisWeekWorkouts] = useState(0);
   const [thisMonthWorkouts, setThisMonthWorkouts] = useState(0);
 
-  /** YTD, calendar week (Mon–Sun, Mon start), and calendar month (1st–end) using local dates on workout_date. */
+  /** YTD, week (Mon–Sun), and month using Pacific YYYY-MM-DD vs workout_date. */
   const calculateStats = (workouts: any[]) => {
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-
-    const ytdStart = getYtdStartLocal(today);
-    const weekStart = getWeekStartLocal(today);
-    const monthStart = getMonthStartLocal(today);
+    const { today, ytdStart, weekStart, monthStart } = getPacificPeriodBounds();
 
     let ytdCount = 0;
     let thisWeekCount = 0;
     let thisMonthCount = 0;
     for (const w of workouts) {
-      if (!w?.workout_date) continue;
-      const workoutDate = parseWorkoutLocalDate(w.workout_date);
-      if (workoutDate > today) continue;
+      const workoutDate = w?.workout_date;
+      if (!workoutDate || workoutDate > today) continue;
       if (workoutDate >= ytdStart) ytdCount++;
       if (workoutDate >= weekStart) thisWeekCount++;
       if (workoutDate >= monthStart) thisMonthCount++;
