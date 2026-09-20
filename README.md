@@ -51,6 +51,54 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+## Read-only workout API
+
+A small HTTPS API so an external coach bot can pull workout history. It is **GET-only** and does not change the existing web app. If `WORKOUT_API_KEY` is unset, these routes return `401` and the UI keeps working as before.
+
+### Endpoints
+
+- `GET /api/workouts?from=YYYY-MM-DD&to=YYYY-MM-DD` — sessions in an inclusive date range (`from` / `to` are optional)
+- `GET /api/workouts/today` — sessions on today's date in Pacific Time (`America/Los_Angeles`), same as the log form
+- `GET /api/workouts/:id` — one session by id
+
+Each session includes date, workout name (`focus`), notes, body weight when stored, and exercises with sets, reps, weight, and rest interval. There is no separate workout-duration column; cardio timings are stored on sets as `reps` (seconds).
+
+### Auth
+
+Send the shared secret from the `WORKOUT_API_KEY` environment variable using either header:
+
+- `Authorization: Bearer <secret>`
+- `X-Api-Key: <secret>`
+
+Missing or wrong keys return `401`. Never commit a real key.
+
+Optional: set `WORKOUT_API_USER_ID` to Kevin's Auth0 `sub` if the database has more than one user. If omitted, the API returns all stored workouts (this is a single-user app).
+
+### Vercel
+
+1. Open the project on Vercel → **Settings → Environment Variables**
+2. Add `WORKOUT_API_KEY` with a long random secret (for example `openssl rand -hex 32`)
+3. Optionally add `WORKOUT_API_USER_ID`
+4. Redeploy so the new variable is available to serverless functions
+
+The public UI does not need `WORKOUT_API_KEY`.
+
+### curl example
+
+```bash
+curl -sS \
+  -H "Authorization: Bearer $WORKOUT_API_KEY" \
+  "https://workout-tracker-rust-nine.vercel.app/api/workouts?from=2026-09-01&to=2026-09-20"
+```
+
+Or with `X-Api-Key`:
+
+```bash
+curl -sS \
+  -H "X-Api-Key: $WORKOUT_API_KEY" \
+  "https://workout-tracker-rust-nine.vercel.app/api/workouts/today"
+```
+
 ## Deployment
 
 ### Deploy to Vercel

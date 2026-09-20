@@ -41,6 +41,11 @@ AUTH0_CLIENT_SECRET='YOUR_CLIENT_SECRET'
 NEXT_PUBLIC_SUPABASE_URL='https://your-project.supabase.co'
 NEXT_PUBLIC_SUPABASE_ANON_KEY='your-anon-key-here'
 SUPABASE_SERVICE_ROLE_KEY='your-service-role-key'
+
+# Optional: read-only coach API (UI works without this; /api/workouts returns 401 if unset)
+WORKOUT_API_KEY='use [openssl rand -hex 32] to generate'
+# Optional: limit API results to one Auth0 user id (sub)
+# WORKOUT_API_USER_ID='auth0|your-user-id'
 ```
 
 **Important:** The server needs `SUPABASE_SERVICE_ROLE_KEY` to read/write workouts. If it's missing, the app falls back to "mock" mode and no data is loaded from Supabase. In production (e.g. Vercel), add all variables in Project Settings → Environment Variables.
@@ -75,6 +80,7 @@ Visit [http://localhost:3000](http://localhost:3000)
 3. Add environment variables:
    - All Auth0 variables (update `APP_BASE_URL` to `https://ksworkouts.vercel.app`)
    - All Supabase variables
+   - `WORKOUT_API_KEY` if you want the read-only coach API (`GET /api/workouts`). The web app works without it.
 4. Auth0 Application Settings are already updated with production URLs (from step 2)
 5. Deploy!
 
