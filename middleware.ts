@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { auth0 } from "./lib/auth0-client";
 
 export async function middleware(request: NextRequest) {
+  // Coach/read-only workout API uses its own shared-secret auth, not Auth0.
+  if (request.nextUrl.pathname.startsWith("/api/workouts")) {
+    return NextResponse.next();
+  }
+
   try {
     // Check if Auth0 is configured by checking for required env vars
     const isAuth0Configured = !!(
