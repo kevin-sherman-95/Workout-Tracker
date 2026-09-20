@@ -4,6 +4,7 @@ import {
   parseInclusiveDateRange,
   queryWorkouts,
   serializeWorkout,
+  workoutApiEnvelope,
 } from "@/lib/workout-api";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,9 @@ export async function GET(request: Request) {
   const result = await queryWorkouts(range);
   if (result.error) return result.error;
 
-  return NextResponse.json({
-    workouts: result.workouts.map(serializeWorkout),
-  });
+  return NextResponse.json(
+    workoutApiEnvelope({
+      workouts: result.workouts.map(serializeWorkout),
+    })
+  );
 }

@@ -609,6 +609,10 @@ export function WorkoutHistoryClient({
                       </CardTitle>
                       <p className="text-sm text-muted-foreground mt-1">
                         {format(parseLocalDate(workout.workout_date), "EEEE, MMMM d, yyyy")}
+                        {workout.body_weight != null &&
+                        Number(workout.body_weight) > 0
+                          ? ` · Body weight ${workout.body_weight} lb`
+                          : ""}
                       </p>
                     </div>
                   </div>

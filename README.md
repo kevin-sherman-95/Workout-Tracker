@@ -63,6 +63,13 @@ A small HTTPS API so an external coach bot can pull workout history. It is **GET
 
 Each session includes date, workout name (`focus`), notes, body weight when stored, and exercises with sets, reps, weight, and rest interval. There is no separate workout-duration column; cardio timings are stored on sets as `reps` (seconds).
 
+Responses are additive and backward compatible:
+
+- Envelope: `schemaVersion` (currently `2`) and `units` (`bodyWeight`/`strengthWeight` in `lb`, cardio `distance` in `mi`, `duration` in seconds, Peloton `output` in `kJ`, swim distance in `yd`).
+- `bodyWeight` stays a number (or `null`). `bodyWeightUnit` is always `"lb"`.
+- Each exercise adds `modality` (`strength`, `bodyweight`, `duration`, `cardio_distance`, `cardio_output`, `swim`, `walk`).
+- Each set keeps raw `reps` / `weight` / `restIntervalSeconds` and adds decoded fields when inferable (`durationSec`, `distanceMi`, `outputKj`, `paceSecPerMi`, `inclinePct`, `intervalSec`, `distanceYd`, `swimSetCount`, `totalDistanceYd`).
+
 ### Auth
 
 Send the shared secret from the `WORKOUT_API_KEY` environment variable using either header:
@@ -88,7 +95,39 @@ The public UI does not need `WORKOUT_API_KEY`.
 ```bash
 curl -sS \
   -H "Authorization: Bearer $WORKOUT_API_KEY" \
-  "https://workout-tracker-rust-nine.vercel.app/api/workouts?from=2026-09-01&to=2026-09-20"
+  "https://ksworkouts.vercel.app/api/workouts?from=2026-09-01&to=2026-09-20"
+```
+
+Example session fields (raw `reps`/`weight` stay; decoded fields are extra):
+
+```json
+{
+  "schemaVersion": 2,
+  "units": { "bodyWeight": "lb", "distance": "mi", "duration": "s", "output": "kJ" },
+  "workouts": [
+    {
+      "bodyWeight": 186.5,
+      "bodyWeightUnit": "lb",
+      "focus": "Cardio",
+      "exercises": [
+        {
+          "name": "Running",
+          "modality": "cardio_distance",
+          "sets": [
+            {
+              "setNumber": 1,
+              "reps": 1800,
+              "weight": 3,
+              "durationSec": 1800,
+              "distanceMi": 3,
+              "paceSecPerMi": 600
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
 ```
 
 Or with `X-Api-Key`:
@@ -96,7 +135,7 @@ Or with `X-Api-Key`:
 ```bash
 curl -sS \
   -H "X-Api-Key: $WORKOUT_API_KEY" \
-  "https://workout-tracker-rust-nine.vercel.app/api/workouts/today"
+  "https://ksworkouts.vercel.app/api/workouts/today"
 ```
 
 ## Deployment

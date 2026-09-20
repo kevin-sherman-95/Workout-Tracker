@@ -11,9 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Trash2, Check, Save, ChevronDown, Clock, Trophy, X, ArrowRight, Info } from "lucide-react";
+import { Plus, Trash2, Check, Save, ChevronDown, Clock, Trophy, X, ArrowRight, Info, Repeat } from "lucide-react";
 import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
-import { sortWorkoutExerciseRows } from "@/lib/workout-exercise-order";
+import { focusShortName } from "@/lib/focus-labels";
+import {
+  rowsToExerciseSets,
+  type WorkoutExerciseSourceRow,
+} from "@/lib/workout-exercise-sets";
 
 interface ExerciseUsage {
   exercise_id: string;
@@ -161,6 +165,104 @@ function changeToneClass(tone: "good" | "bad" | "neutral"): string {
   return "text-muted-foreground";
 }
 
+type LastSameFocusWorkout = {
+  id: string;
+  workout_date: string;
+  focus: string;
+  workout_exercises: WorkoutExerciseSourceRow[];
+};
+
+/** Most recent workout with the same focus (used by comparison + Repeat last). */
+async function fetchLastSameFocusWorkout(args: {
+  focusType: string;
+  effectiveUserId: string;
+  isMockMode: boolean;
+  excludeWorkoutId?: string;
+  knownExercises?: Exercise[];
+}): Promise<LastSameFocusWorkout | null> {
+  const {
+    focusType,
+    effectiveUserId,
+    isMockMode,
+    excludeWorkoutId,
+    knownExercises = [],
+  } = args;
+
+  if (isMockMode) {
+    const mockWorkouts: Array<{
+      id: string;
+      workout_date: string;
+      focus: string;
+      user_id?: string;
+      created_at?: string;
+    }> = JSON.parse(localStorage.getItem("mock-workouts") || "[]");
+    const mockExercises: WorkoutExerciseSourceRow[] = JSON.parse(
+      localStorage.getItem("mock-workout-exercises") || "[]"
+    );
+    const sorted = mockWorkouts
+      .filter(
+        (w) =>
+          w.focus === focusType &&
+          w.user_id === effectiveUserId &&
+          w.id !== excludeWorkoutId
+      )
+      .sort((a, b) => {
+        if (a.workout_date !== b.workout_date) {
+          return a.workout_date < b.workout_date ? 1 : -1;
+        }
+        return (a.created_at ?? "") < (b.created_at ?? "") ? 1 : -1;
+      });
+    if (sorted.length === 0) return null;
+    const prev = sorted[0];
+    return {
+      id: prev.id,
+      workout_date: prev.workout_date,
+      focus: prev.focus,
+      workout_exercises: mockExercises
+        .filter((we) => we.workout_id === prev.id)
+        .map((we) => ({
+          ...we,
+          exercise:
+            we.exercise ??
+            knownExercises.find((e) => e.id === we.exercise_id) ?? {
+              id: we.exercise_id,
+              name: we.exercise_name || "Unknown",
+              muscle_group_id: "",
+            },
+        })),
+    };
+  }
+
+  const client = createClient();
+  let query = client
+    .from("workouts")
+    .select(
+      "id, workout_date, focus, created_at, workout_exercises(id, workout_id, exercise_id, set_number, reps, weight, rest_interval, created_at, exercise:exercises(id, name, muscle_group_id))"
+    )
+    .eq("user_id", effectiveUserId)
+    .eq("focus", focusType)
+    .order("workout_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (excludeWorkoutId) {
+    query = query.neq("id", excludeWorkoutId);
+  }
+
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    workout_date: data.workout_date,
+    focus: data.focus,
+    workout_exercises: (data.workout_exercises || []).map((we: WorkoutExerciseSourceRow) => ({
+      ...we,
+      exercise: we.exercise,
+    })),
+  };
+}
+
 export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: WorkoutFormProps) {
   const router = useRouter();
   const { user, isLoading: isUserLoading } = useUser();
@@ -175,6 +277,8 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [notes, setNotes] = useState("");
   const [bodyWeight, setBodyWeight] = useState<string>("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const exercisesRef = useRef<Exercise[]>([]);
+  exercisesRef.current = exercises;
   const [exerciseUsage, setExerciseUsage] = useState<Map<string, number>>(new Map());
   const [selectedExercises, setSelectedExercises] = useState<ExerciseSet[]>([]);
   const selectedExercisesRef = useRef<ExerciseSet[]>([]);
@@ -188,6 +292,9 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const [exercisesLoadedForFocus, setExercisesLoadedForFocus] = useState<WorkoutFocus | null>(null);
   const focusRef = useRef(focus);
   focusRef.current = focus;
+  const [lastFocusWorkout, setLastFocusWorkout] = useState<LastSameFocusWorkout | null>(null);
+  const [lastFocusLoading, setLastFocusLoading] = useState(false);
+  const [repeatNote, setRepeatNote] = useState<string | null>(null);
 
   // Post-save comparison state
   interface WorkoutStats {
@@ -794,63 +901,9 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
 
         // Group exercises by exercise_id and convert to ExerciseSet format
         // For cardio workouts and Abs, weight stores distance and reps stores time
-        const isCardioWorkout = (workout.focus as WorkoutFocus) === "Cardio";
-        const sortedWorkoutExercises = sortWorkoutExerciseRows(workoutExercises);
-        const exercisesByExerciseId = sortedWorkoutExercises.reduce((acc, we) => {
-          // Must match per-exercise save logic (saveExercise): only "Core" uses time→reps column mapping.
-          // Do not treat weight===0 as Core — bodyweight exercises (e.g. Pull-ups) store reps in `reps`.
-          const exerciseName = (
-            we.exercise_name ??
-            (we.exercise && typeof we.exercise === "object" && "name" in we.exercise
-              ? (we.exercise as { name?: string }).name
-              : undefined) ??
-            ""
-          ).trim();
-          const isCoreExercise = exerciseName === "Core";
-          if (!acc[we.exercise_id]) {
-            acc[we.exercise_id] = {
-              exerciseId: we.exercise_id,
-              sets: [],
-              restInterval: we.rest_interval?.toString() || "90", // Default to 90 seconds
-            };
-          }
-          if (isCardioWorkout) {
-            if (exerciseName === "Swimming") {
-              acc[we.exercise_id].sets.push({
-                reps: 0,
-                weight: 0,
-                distance: we.weight,
-                time: we.reps,
-                swimSets: Math.max(1, we.rest_interval ?? 1),
-              });
-            } else {
-              acc[we.exercise_id].sets.push({
-                reps: 0,
-                weight: 0,
-                distance: we.weight,
-                time: we.reps,
-                ...(exerciseName === "Walking" ? { pace: we.rest_interval ?? 0 } : {}),
-              });
-            }
-          } else if (isCoreExercise) {
-            acc[we.exercise_id].sets.push({
-              reps: 0,
-              weight: 0,
-              distance: 0,
-              time: we.reps,
-            });
-          } else {
-            acc[we.exercise_id].sets.push({
-              reps: we.reps,
-              weight: we.weight,
-              distance: 0,
-              time: 0,
-            });
-          }
-          return acc;
-        }, {} as Record<string, ExerciseSet>);
-
-        setSelectedExercises(Object.values(exercisesByExerciseId));
+        setSelectedExercises(
+          rowsToExerciseSets(workoutExercises, workout.focus, { emptyReps: false })
+        );
       } catch (err: any) {
         setError(err.message || "Failed to load workout");
       } finally {
@@ -860,6 +913,46 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
 
     loadWorkout();
   }, [workoutId]);
+
+  // Prefetch last same-focus workout so "Repeat last [Focus]" can one-tap clone.
+  useEffect(() => {
+    if (workoutId) {
+      setLastFocusWorkout(null);
+      return;
+    }
+    const mockMode = isInMockMode();
+    const effectiveUserId = userId || (mockMode ? "mock-user-id" : null);
+    if (!effectiveUserId) {
+      setLastFocusWorkout(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLastFocusLoading(true);
+    fetchLastSameFocusWorkout({
+      focusType: focus,
+      effectiveUserId,
+      isMockMode: mockMode,
+      knownExercises: exercisesRef.current,
+    })
+      .then((last) => {
+        if (!cancelled) setLastFocusWorkout(last);
+      })
+      .catch(() => {
+        if (!cancelled) setLastFocusWorkout(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLastFocusLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focus, userId, workoutId]);
+
+  useEffect(() => {
+    setRepeatNote(null);
+  }, [focus]);
 
   // Update selected exercises when exercises list becomes available (new workouts only — never clobber loaded edit data)
   useEffect(() => {
@@ -1312,42 +1405,50 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     effectiveUserId: string,
     isMockMode: boolean
   ): Promise<WorkoutStats | null> => {
-    if (isMockMode) {
-      const mockWorkouts = JSON.parse(localStorage.getItem('mock-workouts') || '[]');
-      const mockExercises = JSON.parse(localStorage.getItem('mock-workout-exercises') || '[]');
-      const sorted = mockWorkouts
-        .filter((w: any) => w.focus === focusType && w.user_id === effectiveUserId && w.id !== currentWorkoutId)
-        .sort((a: any, b: any) => new Date(b.workout_date).getTime() - new Date(a.workout_date).getTime());
-      if (sorted.length === 0) return null;
-      const prev = sorted[0];
-      const prevExercises = mockExercises
-        .filter((we: any) => we.workout_id === prev.id)
-        .map((we: any) => ({
-          ...we,
-          exercise: exercises.find(e => e.id === we.exercise_id) || { id: we.exercise_id, name: we.exercise_name || "Unknown", muscle_group_id: "" },
-        }));
-      return computeWorkoutStats(prevExercises, prev.workout_date, prev.focus);
-    }
+    const prev = await fetchLastSameFocusWorkout({
+      focusType,
+      effectiveUserId,
+      isMockMode,
+      excludeWorkoutId: currentWorkoutId,
+      knownExercises: exercises,
+    });
+    if (!prev) return null;
 
-    const client = createClient();
-    const { data, error } = await client
-      .from("workouts")
-      .select("id, workout_date, focus, workout_exercises(id, workout_id, exercise_id, set_number, reps, weight, rest_interval, exercise:exercises(id, name, muscle_group_id))")
-      .eq("user_id", effectiveUserId)
-      .eq("focus", focusType)
-      .neq("id", currentWorkoutId)
-      .order("workout_date", { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error || !data) return null;
-
-    const exercisesData = (data.workout_exercises || []).map((we: any) => ({
-      ...we,
-      exercise: we.exercise,
+    const exercisesData = prev.workout_exercises.map((we) => ({
+      id: we.id ?? "",
+      workout_id: we.workout_id ?? prev.id,
+      exercise_id: we.exercise_id,
+      set_number: we.set_number ?? 0,
+      reps: we.reps,
+      weight: we.weight,
+      rest_interval: we.rest_interval ?? undefined,
+      created_at: we.created_at,
+      exercise: {
+        id: we.exercise?.id ?? we.exercise_id,
+        name: we.exercise?.name ?? we.exercise_name ?? "Unknown",
+        muscle_group_id: we.exercise?.muscle_group_id ?? "",
+      },
     }));
 
-    return computeWorkoutStats(exercisesData, data.workout_date, data.focus);
+    return computeWorkoutStats(exercisesData, prev.workout_date, prev.focus);
+  };
+
+  const handleRepeatLastFocus = () => {
+    if (!lastFocusWorkout || lastFocusWorkout.workout_exercises.length === 0) {
+      setRepeatNote(`No previous ${focusShortName(focus)} workout to copy.`);
+      return;
+    }
+    const cloned = rowsToExerciseSets(
+      lastFocusWorkout.workout_exercises,
+      lastFocusWorkout.focus,
+      { emptyReps: true }
+    );
+    setSelectedExercises(cloned);
+    setSavedExercises(new Set());
+    setCollapsedExercises(new Set());
+    setRepeatNote(
+      `Loaded ${cloned.length} exercise${cloned.length === 1 ? "" : "s"} from ${lastFocusWorkout.workout_date}. Weights copied; reps left empty.`
+    );
   };
 
   // Find the most recent prior workout where Peloton was performed for the same total
@@ -1730,21 +1831,46 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
 
           <div className="space-y-2">
             <Label htmlFor="focus">Focus</Label>
-            <Select
-              id="focus"
-              value={focus}
-              onChange={(e) => setFocus(e.target.value as WorkoutFocus)}
-            >
-              {focusOptions.map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </Select>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <div className="flex-1 min-w-0">
+              <Select
+                id="focus"
+                value={focus}
+                onChange={(e) => setFocus(e.target.value as WorkoutFocus)}
+              >
+                {focusOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </Select>
+              </div>
+              {!workoutId && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleRepeatLastFocus}
+                  disabled={lastFocusLoading || !lastFocusWorkout}
+                  title={
+                    lastFocusWorkout
+                      ? `Clone exercises and last working weights from ${lastFocusWorkout.workout_date}`
+                      : `No previous ${focusShortName(focus)} workout found`
+                  }
+                >
+                  <Repeat className="mr-2 h-4 w-4" />
+                  {lastFocusLoading
+                    ? "Looking up last workout…"
+                    : `Repeat last ${focusShortName(focus)}`}
+                </Button>
+              )}
+            </div>
+            {repeatNote && !workoutId && (
+              <p className="text-xs text-muted-foreground">{repeatNote}</p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="bodyWeight">Weight (lbs)</Label>
+            <Label htmlFor="bodyWeight">Body weight (lbs)</Label>
             <Input
               id="bodyWeight"
               type="number"

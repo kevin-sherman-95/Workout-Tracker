@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { BODY_WEIGHT_UNIT } from "@/lib/body-weight";
 import { getSupabaseWithUser } from "@/lib/supabase/server";
 import { groupWorkoutExercisesInPerformOrder } from "@/lib/workout-exercise-order";
 import type { WorkoutWithExercises } from "@/lib/types";
@@ -7,6 +8,24 @@ import {
   isAuthorizedWorkoutApiRequest,
   isValidIsoDate,
 } from "@/lib/workout-api-helpers";
+import {
+  WORKOUT_API_SCHEMA_VERSION,
+  WORKOUT_API_UNITS,
+  decodeWorkoutSet,
+  inferExerciseModality,
+} from "@/lib/workout-set-decode";
+
+export { WORKOUT_API_SCHEMA_VERSION, WORKOUT_API_UNITS };
+
+export function workoutApiEnvelope<T extends Record<string, unknown>>(
+  payload: T
+) {
+  return {
+    schemaVersion: WORKOUT_API_SCHEMA_VERSION,
+    units: WORKOUT_API_UNITS,
+    ...payload,
+  };
+}
 
 export const WORKOUT_API_SELECT = `
   *,
@@ -71,18 +90,32 @@ export function serializeWorkout(workout: WorkoutWithExercises) {
     name: workout.focus,
     focus: workout.focus,
     notes: workout.notes ?? null,
+    // Numeric `bodyWeight` kept for existing consumers; unit is always lb.
     bodyWeight: workout.body_weight ?? null,
-    exercises: grouped.map((group) => ({
-      id: group.exercise.id,
-      name: group.exercise.name,
-      muscleGroup: group.exercise.muscle_group?.name ?? null,
-      sets: group.sets.map((set) => ({
-        setNumber: set.set_number,
-        reps: set.reps,
-        weight: Number(set.weight),
-        restIntervalSeconds: set.rest_interval ?? null,
-      })),
-    })),
+    bodyWeightUnit: BODY_WEIGHT_UNIT,
+    exercises: grouped.map((group) => {
+      const modality = inferExerciseModality(
+        group.exercise.name,
+        workout.focus
+      );
+      return {
+        id: group.exercise.id,
+        name: group.exercise.name,
+        muscleGroup: group.exercise.muscle_group?.name ?? null,
+        modality,
+        sets: group.sets.map((set) =>
+          decodeWorkoutSet(
+            {
+              set_number: set.set_number,
+              reps: set.reps,
+              weight: Number(set.weight),
+              rest_interval: set.rest_interval ?? null,
+            },
+            modality
+          )
+        ),
+      };
+    }),
   };
 }
 

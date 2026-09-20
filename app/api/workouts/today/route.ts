@@ -4,6 +4,7 @@ import {
   authorizeWorkoutApi,
   queryWorkouts,
   serializeWorkout,
+  workoutApiEnvelope,
 } from "@/lib/workout-api";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +18,10 @@ export async function GET(request: Request) {
   const result = await queryWorkouts({ from: today, to: today });
   if (result.error) return result.error;
 
-  return NextResponse.json({
-    date: today,
-    workouts: result.workouts.map(serializeWorkout),
-  });
+  return NextResponse.json(
+    workoutApiEnvelope({
+      date: today,
+      workouts: result.workouts.map(serializeWorkout),
+    })
+  );
 }
