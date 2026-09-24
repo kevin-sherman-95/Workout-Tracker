@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   formSetToSwimInterval,
-  nextSwimFormSet,
   totalSwimYards,
   type SwimFormSet,
 } from "@/lib/swim-intervals";
@@ -14,7 +13,9 @@ import {
 type SwimIntervalEditorProps = {
   exerciseIndex: number;
   sets: SwimFormSet[];
-  onSetsChange: (sets: SwimFormSet[]) => void;
+  onPatchRow: (setIndex: number, patch: Partial<SwimFormSet>) => void;
+  onAddInterval: () => void;
+  onRemoveInterval: (setIndex: number) => void;
   getTimeDisplayValue: (
     exerciseIndex: number,
     setIndex: number,
@@ -27,7 +28,9 @@ type SwimIntervalEditorProps = {
 export function SwimIntervalEditor({
   exerciseIndex,
   sets,
-  onSetsChange,
+  onPatchRow,
+  onAddInterval,
+  onRemoveInterval,
   getTimeDisplayValue,
   onTimeChange,
   onTimeBlur,
@@ -35,26 +38,11 @@ export function SwimIntervalEditor({
   const intervals = sets.map(formSetToSwimInterval);
   const totalYd = totalSwimYards(intervals);
 
-  const updateRow = (setIndex: number, patch: Partial<SwimFormSet>) => {
-    onSetsChange(
-      sets.map((set, index) => (index === setIndex ? { ...set, ...patch } : set))
-    );
-  };
-
-  const addInterval = () => {
-    onSetsChange([...sets, nextSwimFormSet(sets[sets.length - 1])]);
-  };
-
-  const removeInterval = (setIndex: number) => {
-    if (sets.length <= 1) return;
-    onSetsChange(sets.filter((_, index) => index !== setIndex));
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <Label>Intervals</Label>
-        <Button type="button" variant="outline" size="sm" onClick={addInterval}>
+        <Button type="button" variant="outline" size="sm" onClick={onAddInterval}>
           <Plus className="mr-1 h-3 w-3" />
           Add interval
         </Button>
@@ -87,7 +75,7 @@ export function SwimIntervalEditor({
               aria-label={`Interval ${setIndex + 1} reps`}
               value={(set.swimSets ?? 1).toString()}
               onChange={(e) =>
-                updateRow(setIndex, {
+                onPatchRow(setIndex, {
                   swimSets: Math.max(1, parseInt(e.target.value, 10) || 1),
                 })
               }
@@ -112,7 +100,7 @@ export function SwimIntervalEditor({
               }
               onChange={(e) => {
                 const raw = e.target.value;
-                updateRow(setIndex, {
+                onPatchRow(setIndex, {
                   distance: raw === "" ? 0 : parseInt(raw, 10) || 0,
                 });
               }}
@@ -144,7 +132,7 @@ export function SwimIntervalEditor({
               variant="ghost"
               size="icon"
               aria-label={`Remove interval ${setIndex + 1}`}
-              onClick={() => removeInterval(setIndex)}
+              onClick={() => onRemoveInterval(setIndex)}
             >
               <Trash2 className="h-4 w-4" />
             </Button>

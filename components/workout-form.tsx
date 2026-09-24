@@ -1004,20 +1004,44 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     setSelectedExercises(prev => prev.filter((_, i) => i !== index));
   };
 
-  const replaceExerciseSets = (
-    exerciseIndex: number,
-    sets: ExerciseSet["sets"]
-  ) => {
-    setSelectedExercises((prev) =>
-      prev.map((exercise, idx) =>
-        idx === exerciseIndex ? { ...exercise, sets } : exercise
-      )
-    );
+  const markExerciseUnsaved = (exerciseIndex: number) => {
     setSavedExercises((prev) => {
       const next = new Set(prev);
       next.delete(exerciseIndex);
       return next;
     });
+  };
+
+  const patchSwimRow = (
+    exerciseIndex: number,
+    setIndex: number,
+    patch: Partial<ExerciseSet["sets"][number]>
+  ) => {
+    setSelectedExercises((prev) =>
+      prev.map((exercise, idx) => {
+        if (idx !== exerciseIndex) return exercise;
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set, sIdx) =>
+            sIdx === setIndex ? { ...set, ...patch } : set
+          ),
+        };
+      })
+    );
+    markExerciseUnsaved(exerciseIndex);
+  };
+
+  const addSwimInterval = (exerciseIndex: number) => {
+    setSelectedExercises((prev) =>
+      prev.map((exercise, idx) => {
+        if (idx !== exerciseIndex) return exercise;
+        return {
+          ...exercise,
+          sets: [...exercise.sets, nextSwimFormSet(exercise.sets[exercise.sets.length - 1])],
+        };
+      })
+    );
+    markExerciseUnsaved(exerciseIndex);
   };
 
   const addSet = (exerciseIndex: number) => {
@@ -2054,17 +2078,12 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                     <SwimIntervalEditor
                       exerciseIndex={exerciseIndex}
                       sets={exerciseSet.sets}
-                      onSetsChange={(sets) =>
-                        replaceExerciseSets(
-                          exerciseIndex,
-                          sets.map((set) => ({
-                            reps: set.reps ?? 0,
-                            weight: set.weight ?? 0,
-                            distance: set.distance ?? 0,
-                            time: set.time ?? 0,
-                            swimSets: set.swimSets ?? 1,
-                          }))
-                        )
+                      onPatchRow={(setIndex, patch) =>
+                        patchSwimRow(exerciseIndex, setIndex, patch)
+                      }
+                      onAddInterval={() => addSwimInterval(exerciseIndex)}
+                      onRemoveInterval={(setIndex) =>
+                        removeSet(exerciseIndex, setIndex)
                       }
                       getTimeDisplayValue={getTimeDisplayValue}
                       onTimeChange={handleTimeInputChange}
