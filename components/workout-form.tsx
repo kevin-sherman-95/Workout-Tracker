@@ -14,6 +14,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2, Check, Save, ChevronDown, Clock, Trophy, X, ArrowRight, Info, Repeat } from "lucide-react";
 import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
 import { focusShortName } from "@/lib/focus-labels";
+import { SwimIntervalEditor } from "@/components/swim-interval-editor";
+import {
+  emptySwimFormSet,
+  formatSwimIntervalLine,
+  formatSwimSessionSummary,
+  nextSwimFormSet,
+  rawRowToSwimInterval,
+  swimYardsFromRawRow,
+} from "@/lib/swim-intervals";
 import {
   rowsToExerciseSets,
   type WorkoutExerciseSourceRow,
@@ -33,7 +42,7 @@ interface ExerciseSet {
     time?: number;
     pace?: number;
     /**
-     * Swimming: set count for this row (persisted in `rest_interval` column for that workout_exercise row).
+     * Swimming: interval reps (the "1" in "1 × 100"), persisted in `rest_interval`.
      * Walking: pace (seconds per mile) is persisted in `rest_interval`; incline uses `distance` → DB `weight`.
      * Interval MM:SS uses `time` → `reps` (seconds); distance yd uses `distance` → `weight`.
      */
@@ -124,9 +133,12 @@ function describeCardioCoreChangeVsPrev(
   prevEx: { totalTime: number; totalDistance: number },
   isCardioExercise: boolean,
   formatTime: (s: number) => string,
-  formatDistance: (d: number) => string
+  formatDistance: (d: number) => string,
+  options?: { distanceUnit?: "mi" | "yd"; compareTime?: boolean }
 ): { label: string; tone: "good" | "bad" | "neutral" } {
-  const dt = ex.totalTime - prevEx.totalTime;
+  const compareTime = options?.compareTime !== false;
+  const distanceUnit = options?.distanceUnit ?? "mi";
+  const dt = compareTime ? ex.totalTime - prevEx.totalTime : 0;
   const dd = isCardioExercise ? ex.totalDistance - prevEx.totalDistance : 0;
 
   if (dt === 0 && dd === 0) {
@@ -139,7 +151,8 @@ function describeCardioCoreChangeVsPrev(
   }
   if (isCardioExercise && dd !== 0) {
     const sign = dd > 0 ? "+" : "-";
-    parts.push(`${sign}${formatDistance(Math.abs(dd))} dist`);
+    const unit = distanceUnit === "yd" ? "yd" : "dist";
+    parts.push(`${sign}${formatDistance(Math.abs(dd))} ${unit}`);
   }
 
   let good = 0;
@@ -972,11 +985,16 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   const addExercise = () => {
     // Always add an exercise, even if list is empty (will show "No exercises available")
     const defaultExerciseId = exercises.length > 0 ? exercises[0].id : "";
+    const defaultName = exercises.find((e) => e.id === defaultExerciseId)?.name;
+    const firstSet =
+      defaultName === "Swimming"
+        ? emptySwimFormSet()
+        : { reps: 0, weight: 0, distance: 0, time: 0, swimSets: 1 };
     setSelectedExercises((prev) => [
       ...prev,
       {
         exerciseId: defaultExerciseId,
-        sets: [{ reps: 0, weight: 0, distance: 0, time: 0, swimSets: 1 }],
+        sets: [firstSet],
         restInterval: "90", // Default to 90 seconds
       },
     ]);
@@ -986,13 +1004,34 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     setSelectedExercises(prev => prev.filter((_, i) => i !== index));
   };
 
+  const replaceExerciseSets = (
+    exerciseIndex: number,
+    sets: ExerciseSet["sets"]
+  ) => {
+    setSelectedExercises((prev) =>
+      prev.map((exercise, idx) =>
+        idx === exerciseIndex ? { ...exercise, sets } : exercise
+      )
+    );
+    setSavedExercises((prev) => {
+      const next = new Set(prev);
+      next.delete(exerciseIndex);
+      return next;
+    });
+  };
+
   const addSet = (exerciseIndex: number) => {
     setSelectedExercises(prev =>
       prev.map((exercise, idx) => {
         if (idx !== exerciseIndex) return exercise;
+        const exerciseName = exercises.find((e) => e.id === exercise.exerciseId)?.name;
+        const nextSet =
+          exerciseName === "Swimming"
+            ? nextSwimFormSet(exercise.sets[exercise.sets.length - 1])
+            : { reps: 0, weight: 0, distance: 0, time: 0, swimSets: 1 };
         return {
           ...exercise,
-          sets: [...exercise.sets, { reps: 0, weight: 0, distance: 0, time: 0, swimSets: 1 }],
+          sets: [...exercise.sets, nextSet],
         };
       })
     );
@@ -1049,9 +1088,21 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   };
 
   const updateExercise = (exerciseIndex: number, exerciseId: string) => {
+    const nextName = exercises.find((e) => e.id === exerciseId)?.name;
     setSelectedExercises(prev =>
       prev.map((exercise, idx) => {
         if (idx !== exerciseIndex) return exercise;
+        if (nextName === "Swimming") {
+          return {
+            ...exercise,
+            exerciseId,
+            sets: exercise.sets.map((set) => ({
+              ...set,
+              swimSets: Math.max(1, set.swimSets ?? 1),
+              distance: set.distance && set.distance > 0 ? set.distance : 100,
+            })),
+          };
+        }
         return { ...exercise, exerciseId };
       })
     );
@@ -1344,13 +1395,19 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
       const name = we.exercise?.name || "Unknown";
       const isCoreExercise = name === "Core";
       const isWalking = name === "Walking";
+      const isSwimming = name === "Swimming";
       const cardioCountsTowardDistance = isCardio && !isWalking;
+      const rowDistance = isSwimming
+        ? swimYardsFromRawRow(we)
+        : cardioCountsTowardDistance
+          ? Number(we.weight) || 0
+          : 0;
 
       totalSets++;
 
       if (isCardio || isCoreExercise) {
         totalTime += we.reps;
-        if (cardioCountsTowardDistance) totalDistance += we.weight;
+        if (cardioCountsTowardDistance) totalDistance += rowDistance;
       } else {
         totalReps += we.reps;
         totalVolume += we.reps * we.weight;
@@ -1361,7 +1418,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         existing.sets++;
         if (isCardio || isCoreExercise) {
           existing.totalTime += we.reps;
-          if (cardioCountsTowardDistance) existing.totalDistance += we.weight;
+          if (cardioCountsTowardDistance) existing.totalDistance += rowDistance;
         } else {
           if (
             compareStrengthSets(
@@ -1382,7 +1439,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
           bestReps: isCardio || isCoreExercise ? 0 : we.reps,
           totalVolume: isCardio || isCoreExercise ? 0 : we.reps * we.weight,
           totalTime: isCardio || isCoreExercise ? we.reps : 0,
-          totalDistance: cardioCountsTowardDistance ? we.weight : 0,
+          totalDistance: cardioCountsTowardDistance ? rowDistance : 0,
         });
       }
     }
@@ -1538,6 +1595,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         set_number: idx + 1,
         reps: isCardio || isCoreExercise ? (set.time ?? 0) : set.reps,
         weight: isCardio ? (set.distance ?? 0) : isCoreExercise ? 0 : set.weight,
+        rest_interval:
+          name === "Swimming"
+            ? Math.max(1, Math.round(set.swimSets ?? 1))
+            : undefined,
         exercise: exercise || { id: es.exerciseId, name: "Unknown", muscle_group_id: "" },
       }));
     });
@@ -1989,17 +2050,35 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                 </CardHeader>
                 {!isCollapsed && (
                 <CardContent className="space-y-4">
+                  {exercise?.name === "Swimming" ? (
+                    <SwimIntervalEditor
+                      exerciseIndex={exerciseIndex}
+                      sets={exerciseSet.sets}
+                      onSetsChange={(sets) =>
+                        replaceExerciseSets(
+                          exerciseIndex,
+                          sets.map((set) => ({
+                            reps: set.reps ?? 0,
+                            weight: set.weight ?? 0,
+                            distance: set.distance ?? 0,
+                            time: set.time ?? 0,
+                            swimSets: set.swimSets ?? 1,
+                          }))
+                        )
+                      }
+                      getTimeDisplayValue={getTimeDisplayValue}
+                      onTimeChange={handleTimeInputChange}
+                      onTimeBlur={handleTimeInputBlur}
+                    />
+                  ) : (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between mb-2">
                       <Label>
-                        {exercise?.name === "Swimming"
+                        {focus === "Cardio" || exercise?.name === "Core"
                           ? "Session"
-                          : focus === "Cardio" || exercise?.name === "Core"
-                            ? "Session"
-                            : "Sets"}
+                          : "Sets"}
                       </Label>
-                      {(focus !== "Cardio" || exercise?.name === "Swimming") &&
-                        exercise?.name !== "Core" && (
+                      {focus !== "Cardio" && exercise?.name !== "Core" && (
                         <Button
                           type="button"
                           variant="outline"
@@ -2011,14 +2090,6 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                         </Button>
                       )}
                     </div>
-                    {exercise?.name === "Swimming" && (
-                      <div className="flex items-center gap-4 px-3 text-xs font-medium text-muted-foreground">
-                        <div className="w-12 shrink-0" aria-hidden />
-                        <div className="flex-1 min-w-0">Sets</div>
-                        <div className="flex-1 min-w-0">Distance (yd)</div>
-                        <div className="flex-1 min-w-0">Interval</div>
-                      </div>
-                    )}
                     {exerciseSet.sets.map((set, setIndex) => (
                       <div
                         key={setIndex}
@@ -2038,67 +2109,6 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                               placeholder="0:00"
                             />
                           </div>
-                        ) : focus === "Cardio" && exercise?.name === "Swimming" ? (
-                          <>
-                            <div className="flex-1 space-y-1">
-                              <Label className="sr-only">Sets</Label>
-                              <Input
-                                type="number"
-                                min="1"
-                                step="1"
-                                value={(set.swimSets ?? 1).toString()}
-                                onChange={(e) =>
-                                  updateSet(
-                                    exerciseIndex,
-                                    setIndex,
-                                    "swimSets",
-                                    Math.max(1, parseInt(e.target.value, 10) || 1)
-                                  )
-                                }
-                                placeholder="1"
-                              />
-                            </div>
-                            <div className="flex-1 space-y-1">
-                              <Label className="sr-only">Distance (yd)</Label>
-                              <Input
-                                type="number"
-                                min="0"
-                                step="1"
-                                value={(set.distance ?? 0).toString()}
-                                onChange={(e) =>
-                                  updateSet(
-                                    exerciseIndex,
-                                    setIndex,
-                                    "distance",
-                                    parseInt(e.target.value, 10) || 0
-                                  )
-                                }
-                                placeholder="0"
-                              />
-                            </div>
-                            <div className="flex-1 space-y-1">
-                              <Label className="sr-only">Interval (MM:SS)</Label>
-                              <Input
-                                type="text"
-                                inputMode="numeric"
-                                maxLength={5}
-                                value={getTimeDisplayValue(
-                                  exerciseIndex,
-                                  setIndex,
-                                  set.time ?? 0
-                                )}
-                                onChange={(e) =>
-                                  handleTimeInputChange(
-                                    exerciseIndex,
-                                    setIndex,
-                                    e.target.value
-                                  )
-                                }
-                                onBlur={() => handleTimeInputBlur(exerciseIndex, setIndex)}
-                                placeholder="0:00"
-                              />
-                            </div>
-                          </>
                         ) : focus === "Cardio" && exercise?.name === "Running" ? (
                           <>
                             <div className="flex-1 space-y-1">
@@ -2332,6 +2342,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                       </div>
                     ))}
                   </div>
+                  )}
                   
                   {focus !== "Cardio" && exercise?.name !== "Core" && (
                     <div className="space-y-2 pt-4 border-t">
@@ -2464,8 +2475,18 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                 (() => {
                   const historyExerciseName =
                     exercises.find((e) => e.id === historyPopupExerciseId)?.name ?? "";
+                  const isSwimHistory = historyExerciseName === "Swimming";
                   return exerciseHistory.map((entry, i) => {
                   const popupRestLabel = restLabelFromSets(entry.sets, historyExerciseName);
+                  const swimIntervals = isSwimHistory
+                    ? entry.sets.map((set) =>
+                        rawRowToSwimInterval({
+                          reps: set.reps,
+                          weight: set.weight,
+                          rest_interval: set.rest_interval,
+                        })
+                      )
+                    : [];
                   return (
                   <div key={i} className="space-y-2">
                     <p className="text-sm font-medium text-muted-foreground">
@@ -2477,6 +2498,18 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                       })}
                     </p>
                     <div className="bg-muted/30 rounded-lg overflow-hidden">
+                      {isSwimHistory ? (
+                        <div className="px-3 py-2 space-y-1">
+                          <p className="text-sm font-medium">
+                            {formatSwimSessionSummary(swimIntervals)}
+                          </p>
+                          {swimIntervals.map((interval, j) => (
+                            <p key={j} className="text-sm text-muted-foreground">
+                              {formatSwimIntervalLine(interval)}
+                            </p>
+                          ))}
+                        </div>
+                      ) : (
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border/50">
@@ -2495,6 +2528,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                           ))}
                         </tbody>
                       </table>
+                      )}
                       {popupRestLabel && (
                         <p className="text-xs text-muted-foreground px-3 py-2 border-t border-border/30 bg-muted/20">
                           {popupRestLabel}
@@ -2570,6 +2604,7 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, pelotonComparis
                   const isCoreExercise = normalizedExerciseName === "core";
                   const isWalkingExercise = normalizedExerciseName === "walking";
                   const isPelotonExercise = exerciseName === "Peloton";
+                  const isSwimmingExercise = exerciseName === "Swimming";
                   const shouldShowDistance =
                     isCardio &&
                     !isWalkingExercise &&
@@ -2636,7 +2671,12 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, pelotonComparis
                           prevEx,
                           shouldShowDistance,
                           formatTime,
-                          formatDistance
+                          isSwimmingExercise
+                            ? (d) => Math.round(d).toLocaleString()
+                            : formatDistance,
+                          isSwimmingExercise
+                            ? { distanceUnit: "yd", compareTime: false }
+                            : undefined
                         );
                         vsLastNode = (
                           <span className={changeToneClass(tone)}>{label}</span>
@@ -2659,7 +2699,9 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, pelotonComparis
                       <p className="font-medium text-sm mb-2">{ex.name}</p>
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         <div>
-                          <span className="text-muted-foreground">Sets: </span>
+                          <span className="text-muted-foreground">
+                            {isSwimmingExercise ? "Intervals: " : "Sets: "}
+                          </span>
                           <span className="font-medium">{ex.sets}</span>
                           {prevEx && prevEx.sets !== ex.sets && (
                             <span className={ex.sets > prevEx.sets ? " text-green-500" : " text-orange-500"}>
@@ -2667,7 +2709,14 @@ function WorkoutComparisonOverlay({ currentStats, previousStats, pelotonComparis
                             </span>
                           )}
                         </div>
-                        {(isCardio || isCoreExercise) ? (
+                        {isSwimmingExercise ? (
+                          <div>
+                            <span className="text-muted-foreground">Total: </span>
+                            <span className="font-medium">
+                              {Math.round(Number(ex.totalDistance) || 0).toLocaleString()} yd
+                            </span>
+                          </div>
+                        ) : (isCardio || isCoreExercise) ? (
                           <div className="space-y-0.5">
                             <div>
                               <span className="text-muted-foreground">Time: </span>

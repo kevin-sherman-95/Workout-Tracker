@@ -8,6 +8,7 @@ import {
   isAuthorizedWorkoutApiRequest,
   isValidIsoDate,
 } from "@/lib/workout-api-helpers";
+import { summarizeSwimDecodedSets } from "@/lib/swim-intervals";
 import {
   WORKOUT_API_SCHEMA_VERSION,
   WORKOUT_API_UNITS,
@@ -98,22 +99,32 @@ export function serializeWorkout(workout: WorkoutWithExercises) {
         group.exercise.name,
         workout.focus
       );
+      const sets = group.sets.map((set) =>
+        decodeWorkoutSet(
+          {
+            set_number: set.set_number,
+            reps: set.reps,
+            weight: Number(set.weight),
+            rest_interval: set.rest_interval ?? null,
+          },
+          modality
+        )
+      );
+      const swimSummary =
+        modality === "swim" ? summarizeSwimDecodedSets(sets) : null;
       return {
         id: group.exercise.id,
         name: group.exercise.name,
         muscleGroup: group.exercise.muscle_group?.name ?? null,
         modality,
-        sets: group.sets.map((set) =>
-          decodeWorkoutSet(
-            {
-              set_number: set.set_number,
-              reps: set.reps,
-              weight: Number(set.weight),
-              rest_interval: set.rest_interval ?? null,
-            },
-            modality
-          )
-        ),
+        ...(swimSummary
+          ? {
+              totalDistanceYd: swimSummary.totalDistanceYd,
+              intervalCount: swimSummary.intervalCount,
+              intervals: swimSummary.intervals,
+            }
+          : {}),
+        sets,
       };
     }),
   };

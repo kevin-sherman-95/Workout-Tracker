@@ -7,6 +7,7 @@ import { Select } from "@/components/ui/select";
 import { ExerciseProgressChart } from "@/components/exercise-progress-chart";
 import { format } from "date-fns";
 import type { WorkoutWithExercises, Exercise } from "@/lib/types";
+import { swimYardsFromRawRow, swimIntervalReps } from "@/lib/swim-intervals";
 
 const ALL_FOCUSES = "__all__";
 
@@ -191,7 +192,7 @@ function getExercisePRs(
 
       const weight = Number(we.weight) || 0;
       const reps = Number(we.reps) || 0;
-      const swimSets = Number(we.rest_interval) || 0;
+      const swimSets = swimIntervalReps(we.rest_interval);
 
       session.totalReps += we.reps;
       session.setCount += 1;
@@ -200,11 +201,11 @@ function getExercisePRs(
         session.bestSetReps = we.reps;
       }
       // Cardio/duration rows store time in `reps` (seconds) and distance/output
-      // in `weight`. Swimming additionally stores per-row set count in
-      // `rest_interval`, so total yards = weight (yd/set) × rest_interval.
+      // in `weight`. Swimming stores interval reps in `rest_interval`, so
+      // total yards = weight (yd) × rest_interval (reps).
       session.totalDistanceOrOutput += weight;
       session.totalTimeSec += reps;
-      session.totalSwimYards += weight * swimSets;
+      session.totalSwimYards += swimYardsFromRawRow(we);
       session.totalSwimSets += swimSets;
     });
   });
@@ -261,7 +262,7 @@ function getExercisePRs(
             exerciseId: s.exerciseId,
             totalYards: s.totalSwimYards,
             timeSec: s.totalTimeSec,
-            sets: s.totalSwimSets,
+            sets: s.setCount,
           };
         case "duration":
           return {
@@ -715,8 +716,10 @@ function renderPRStatContent(entry: PREntry): PRStatContent {
       const timeLabel =
         entry.timeSec > 0 ? formatSecondsAsDuration(entry.timeSec) : null;
       const setsLabel =
-        entry.sets > 0 ? `${entry.sets} set${entry.sets !== 1 ? "s" : ""}` : null;
-      const subParts = [setsLabel, timeLabel ? `${timeLabel} interval` : null]
+        entry.sets > 0
+          ? `${entry.sets} interval${entry.sets !== 1 ? "s" : ""}`
+          : null;
+      const subParts = [setsLabel, timeLabel ? `${timeLabel} clock` : null]
         .filter(Boolean)
         .join(" · ");
       return {

@@ -17,6 +17,19 @@ import {
   isWorkoutDateInHistoryPeriod,
   type WorkoutHistoryPeriod,
 } from "@/lib/workout-date-periods";
+import {
+  formatSwimIntervalLine,
+  formatSwimSessionSummary,
+  swimIntervalsFromRawRows,
+} from "@/lib/swim-intervals";
+
+function getWorkoutSwimSummary(workout: WorkoutWithExercises): string | null {
+  const swimRows = sortWorkoutExerciseRows(workout.workout_exercises).filter(
+    (we) => we.exercise?.name === "Swimming"
+  );
+  if (swimRows.length === 0) return null;
+  return formatSwimSessionSummary(swimIntervalsFromRawRows(swimRows));
+}
 
 /** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
 function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
@@ -613,6 +626,10 @@ export function WorkoutHistoryClient({
                         Number(workout.body_weight) > 0
                           ? ` · Body weight ${workout.body_weight} lb`
                           : ""}
+                        {(() => {
+                          const swimSummary = getWorkoutSwimSummary(workout);
+                          return swimSummary ? ` · ${swimSummary}` : "";
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -688,13 +705,33 @@ export function WorkoutHistoryClient({
                           : ""
                       }`}
                     >
-                      <h4 className="font-semibold mb-2">{exercise.name}</h4>
+                      <h4 className="font-semibold mb-2">
+                        {isCardioWorkout && isSwimming
+                          ? formatSwimSessionSummary(
+                              swimIntervalsFromRawRows(
+                                [...sets].sort((a, b) => a.set_number - b.set_number)
+                              )
+                            )
+                          : exercise.name}
+                      </h4>
                       <div className="space-y-1">
-                        {sets
+                        {isCardioWorkout && isSwimming
+                          ? [...sets]
+                              .sort((a, b) => a.set_number - b.set_number)
+                              .map((set, index) => (
+                                <div
+                                  key={set.set_number}
+                                  className="text-sm text-muted-foreground"
+                                >
+                                  {formatSwimIntervalLine(
+                                    swimIntervalsFromRawRows([set])[0]
+                                  ) || `Interval ${index + 1}`}
+                                </div>
+                              ))
+                          : sets
                           .sort((a, b) => a.set_number - b.set_number)
                           .map((set) => {
                             // For cardio workouts: reps stores time (seconds), weight stores distance
-                            // Swimming: reps = interval (seconds), weight = distance (yd), rest_interval = set count
                             // For Core exercises: reps stores time (seconds), weight is 0
                             if (isCardioWorkout && isWalking) {
                               const timeDisplay = formatTime(set.reps);
@@ -714,33 +751,6 @@ export function WorkoutHistoryClient({
                                   {[timeDisplay + " minutes", inclineDisplay, paceDisplay]
                                     .filter(Boolean)
                                     .join(" • ") || "—"}
-                                </div>
-                              );
-                            }
-                            if (isCardioWorkout && isSwimming) {
-                              const swimSetCount =
-                                set.rest_interval != null && set.rest_interval > 0
-                                  ? set.rest_interval
-                                  : 0;
-                              const ydPerSet = set.weight > 0 ? Math.round(set.weight) : 0;
-                              const setCount =
-                                swimSetCount > 0 ? `${swimSetCount} sets` : null;
-                              const distYd =
-                                ydPerSet > 0 ? `${ydPerSet} yd` : null;
-                              const totalYards =
-                                swimSetCount > 0 && ydPerSet > 0
-                                  ? `${(swimSetCount * ydPerSet).toLocaleString()} yd total`
-                                  : null;
-                              const intDisplay =
-                                set.reps > 0
-                                  ? `${formatTime(set.reps)} interval`
-                                  : null;
-                              return (
-                                <div
-                                  key={set.set_number}
-                                  className="text-sm text-muted-foreground"
-                                >
-                                  {[setCount, distYd, totalYards, intDisplay].filter(Boolean).join(" • ") || "—"}
                                 </div>
                               );
                             }

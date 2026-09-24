@@ -90,6 +90,7 @@ export function rowsToExerciseSets(
           weight: 0,
           distance: we.weight,
           time: emptyReps ? 0 : we.reps,
+          // rest_interval is interval reps (the "1" in "1 × 100"). Missing/0 → 1.
           swimSets: Math.max(1, we.rest_interval ?? 1),
         });
       } else {
