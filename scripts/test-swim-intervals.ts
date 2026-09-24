@@ -37,7 +37,17 @@ assert.strictEqual(
 );
 assert.strictEqual(
   formatSwimIntervalLine(kevinIntervals[0]),
-  "1 × 100 · 3:00"
+  "1 × 100 · interval 3:00"
+);
+assert.strictEqual(
+  formatSwimIntervalLine(
+    rawRowToSwimInterval({
+      reps: 180,
+      weight: 100,
+      rest_interval: 1,
+    })
+  ),
+  "1 × 100 · interval 3:00"
 );
 assert.strictEqual(formatSwimIntervalLine(kevinIntervals[2]), "1 × 200");
 

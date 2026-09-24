@@ -694,6 +694,16 @@ export function WorkoutHistoryClient({
                     isSwimming,
                     isWalking
                   );
+                  const swimIntervals =
+                    isCardioWorkout && isSwimming
+                      ? swimIntervalsFromRawRows(
+                          sortWorkoutExerciseRows(workout.workout_exercises).filter(
+                            (we) =>
+                              we.exercise?.id === exercise.id ||
+                              we.exercise?.name === "Swimming"
+                          )
+                        )
+                      : [];
 
                   return (
                     <div
@@ -707,25 +717,17 @@ export function WorkoutHistoryClient({
                     >
                       <h4 className="font-semibold mb-2">
                         {isCardioWorkout && isSwimming
-                          ? formatSwimSessionSummary(
-                              swimIntervalsFromRawRows(
-                                [...sets].sort((a, b) => a.set_number - b.set_number)
-                              )
-                            )
+                          ? formatSwimSessionSummary(swimIntervals)
                           : exercise.name}
                       </h4>
                       <div className="space-y-1">
                         {isCardioWorkout && isSwimming
-                          ? [...sets]
-                              .sort((a, b) => a.set_number - b.set_number)
-                              .map((set, index) => (
+                          ? swimIntervals.map((interval, index) => (
                                 <div
-                                  key={set.set_number}
+                                  key={`${exercise.id}-interval-${index}`}
                                   className="text-sm text-muted-foreground"
                                 >
-                                  {formatSwimIntervalLine(
-                                    swimIntervalsFromRawRows([set])[0]
-                                  ) || `Interval ${index + 1}`}
+                                  {formatSwimIntervalLine(interval)}
                                 </div>
                               ))
                           : sets

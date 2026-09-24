@@ -103,7 +103,7 @@ export function formatIntervalMmSs(seconds: number | null | undefined): string |
 export function formatSwimIntervalLine(interval: SwimInterval): string {
   const base = `${interval.reps} × ${interval.distanceYd}`;
   const clock = formatIntervalMmSs(interval.intervalSec);
-  return clock ? `${base} · ${clock}` : base;
+  return clock ? `${base} · interval ${clock}` : base;
 }
 
 export function formatSwimSessionSummary(intervals: SwimInterval[]): string {

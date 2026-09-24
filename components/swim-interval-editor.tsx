@@ -135,7 +135,7 @@ export function SwimIntervalEditor({
                 onTimeChange(exerciseIndex, setIndex, e.target.value)
               }
               onBlur={() => onTimeBlur(exerciseIndex, setIndex)}
-              placeholder="3:00"
+              placeholder="m:ss"
             />
           </div>
           {sets.length > 1 ? (
