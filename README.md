@@ -6,6 +6,7 @@ A Next.js workout tracking app built with Supabase for tracking gym workouts, ex
 
 - Log workouts by muscle group focus (Chest / Shoulders / Triceps, Back / Biceps, Legs, etc.)
 - Track exercises with sets, reps, and weight
+- Log swim sessions as a list of intervals (`reps × yards`, optional leave-on time) with a live auto-total
 - View workout history
 - Track progress week-over-week and month-over-month
 - Personal records tracking
@@ -65,10 +66,27 @@ Each session includes date, workout name (`focus`), notes, body weight when stor
 
 Responses are additive and backward compatible:
 
-- Envelope: `schemaVersion` (currently `2`) and `units` (`bodyWeight`/`strengthWeight` in `lb`, cardio `distance` in `mi`, `duration` in seconds, Peloton `output` in `kJ`, swim distance in `yd`).
+- Envelope: `schemaVersion` (currently `3`) and `units` (`bodyWeight`/`strengthWeight` in `lb`, cardio `distance` in `mi`, `duration` in seconds, Peloton `output` in `kJ`, swim distance in `yd`).
 - `bodyWeight` stays a number (or `null`). `bodyWeightUnit` is always `"lb"`.
 - Each exercise adds `modality` (`strength`, `bodyweight`, `duration`, `cardio_distance`, `cardio_output`, `swim`, `walk`).
 - Each set keeps raw `reps` / `weight` / `restIntervalSeconds` and adds decoded fields when inferable (`durationSec`, `distanceMi`, `outputKj`, `paceSecPerMi`, `inclinePct`, `intervalSec`, `distanceYd`, `swimSetCount`, `totalDistanceYd`).
+- Swim exercises also add `intervals` (one object per row: `reps`, `distanceYd`, `intervalSec`, `totalDistanceYd`) plus session `totalDistanceYd` and `intervalCount`. Total yards is always the sum of `reps × distanceYd`. Older collapsed rows (for example `7 × 100`) still decode as a single interval.
+
+### Logging a mixed swim
+
+On a Cardio workout, pick **Swimming** and add one interval row per piece. Leave interval time blank unless you used a clock.
+
+Example (1000 yd):
+
+- `1 × 100` · interval `3:00` (optional)
+- `1 × 100`
+- `1 × 200`
+- `1 × 100`
+- `1 × 200`
+- `1 × 100`
+- `1 × 200`
+
+The form shows **Total: 1,000 yd** from those rows. You never type the total. History shows `Swim · 1,000 yd · 7 intervals`.
 
 ### Auth
 
@@ -98,11 +116,26 @@ curl -sS \
   "https://ksworkouts.vercel.app/api/workouts?from=2026-09-01&to=2026-09-20"
 ```
 
-Example session fields (raw `reps`/`weight` stay; decoded fields are extra):
+Example session fields (raw `reps`/`weight` stay; decoded fields are extra). A mixed swim adds `intervals` and a derived `totalDistanceYd`:
 
 ```json
 {
-  "schemaVersion": 2,
+  "name": "Swimming",
+  "modality": "swim",
+  "totalDistanceYd": 1000,
+  "intervalCount": 7,
+  "intervals": [
+    { "reps": 1, "distanceYd": 100, "intervalSec": 180, "totalDistanceYd": 100 },
+    { "reps": 1, "distanceYd": 200, "intervalSec": null, "totalDistanceYd": 200 }
+  ]
+}
+```
+
+Cardio example (raw `reps`/`weight` stay; decoded fields are extra):
+
+```json
+{
+  "schemaVersion": 3,
   "units": { "bodyWeight": "lb", "distance": "mi", "duration": "s", "output": "kJ" },
   "workouts": [
     {

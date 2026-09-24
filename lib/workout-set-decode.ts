@@ -6,7 +6,9 @@
  * and adds parallel decoded fields for API consumers.
  */
 
-export const WORKOUT_API_SCHEMA_VERSION = 2;
+import { swimIntervalReps } from "@/lib/swim-intervals";
+
+export const WORKOUT_API_SCHEMA_VERSION = 3;
 
 export const WORKOUT_API_UNITS = {
   bodyWeight: "lb",
@@ -114,15 +116,17 @@ export function decodeWorkoutSet(
         durationSec: reps,
         outputKj: weight,
       };
-    case "swim":
+    case "swim": {
+      const intervalReps = swimIntervalReps(rest);
       return {
         ...base,
-        durationSec: reps,
-        intervalSec: reps,
+        durationSec: reps > 0 ? reps : null,
+        intervalSec: reps > 0 ? reps : null,
         distanceYd: weight,
-        swimSetCount: rest,
-        totalDistanceYd: rest != null && rest > 0 ? rest * weight : null,
+        swimSetCount: intervalReps,
+        totalDistanceYd: intervalReps * weight,
       };
+    }
     case "walk":
       return {
         ...base,
