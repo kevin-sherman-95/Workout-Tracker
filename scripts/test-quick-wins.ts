@@ -14,6 +14,7 @@ import {
 import {
   decodeWorkoutSet,
   inferExerciseModality,
+  shouldShowHistoryWeightColumn,
 } from "../lib/workout-set-decode";
 import { rowsToExerciseSets } from "../lib/workout-exercise-sets";
 import { focusShortName } from "../lib/focus-labels";
@@ -99,5 +100,42 @@ assert.strictEqual(cloned[0].sets[1].reps, 0);
 assert.strictEqual(focusShortName("Chest / Shoulders / Triceps"), "Push");
 assert.strictEqual(focusShortName("Back / Biceps"), "Pull");
 assert.strictEqual(focusShortName("Cardio"), "Cardio");
+
+assert.strictEqual(
+  shouldShowHistoryWeightColumn(
+    "Pull-ups",
+    [{ weight: 0 }, { weight: 0 }],
+    "Back / Biceps"
+  ),
+  false
+);
+assert.strictEqual(
+  shouldShowHistoryWeightColumn(
+    "Pull-ups",
+    [{ weight: 0 }, { weight: 25 }],
+    "Back / Biceps"
+  ),
+  true
+);
+assert.strictEqual(
+  shouldShowHistoryWeightColumn(
+    "Barbell Bench Press",
+    [{ weight: 0 }, { weight: 0 }],
+    "Chest / Shoulders / Triceps"
+  ),
+  true
+);
+assert.strictEqual(
+  shouldShowHistoryWeightColumn(
+    "Barbell Bench Press",
+    [{ weight: 185 }, { weight: 195 }],
+    "Chest / Shoulders / Triceps"
+  ),
+  true
+);
+assert.strictEqual(
+  shouldShowHistoryWeightColumn("Pull-ups", []),
+  false
+);
 
 console.log("quick-win helper checks passed");

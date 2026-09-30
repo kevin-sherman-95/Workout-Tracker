@@ -19,6 +19,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { BODY_WEIGHT_TARGET_LB } from "@/lib/body-weight";
+import { shouldShowHistoryWeightColumn } from "@/lib/workout-set-decode";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -153,7 +154,10 @@ function ProgressDotWorkoutModal({
         })
         .sort((a, b) => a.set_number - b.set_number);
 
-  const isPullups = selection.exerciseName === "Pull-ups";
+  const showHistoryWeight = shouldShowHistoryWeightColumn(
+    selection.exerciseName,
+    exerciseRows
+  );
 
   return (
     <div
@@ -199,7 +203,7 @@ function ProgressDotWorkoutModal({
                     <th className="text-left py-2 px-3 font-medium text-muted-foreground">
                       Set
                     </th>
-                    {!isPullups ? (
+                    {showHistoryWeight ? (
                       <th className="text-left py-2 px-3 font-medium text-muted-foreground">
                         Weight (lbs)
                       </th>
@@ -218,7 +222,7 @@ function ProgressDotWorkoutModal({
                       }
                     >
                       <td className="py-1.5 px-3">{set.set_number}</td>
-                      {!isPullups ? <td className="py-1.5 px-3">{set.weight}</td> : null}
+                      {showHistoryWeight ? <td className="py-1.5 px-3">{set.weight}</td> : null}
                       <td className="py-1.5 px-3">{set.reps}</td>
                     </tr>
                   ))}

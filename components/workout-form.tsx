@@ -18,6 +18,7 @@ import {
   rowsToExerciseSets,
   type WorkoutExerciseSourceRow,
 } from "@/lib/workout-exercise-sets";
+import { shouldShowHistoryWeightColumn } from "@/lib/workout-set-decode";
 
 interface ExerciseUsage {
   exercise_id: string;
@@ -2464,6 +2465,10 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                 (() => {
                   const historyExerciseName =
                     exercises.find((e) => e.id === historyPopupExerciseId)?.name ?? "";
+                  const showHistoryWeight = shouldShowHistoryWeightColumn(
+                    historyExerciseName,
+                    exerciseHistory.flatMap((entry) => entry.sets)
+                  );
                   return exerciseHistory.map((entry, i) => {
                   const popupRestLabel = restLabelFromSets(entry.sets, historyExerciseName);
                   return (
@@ -2481,7 +2486,9 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                         <thead>
                           <tr className="border-b border-border/50">
                             <th className="text-left py-2 px-3 font-medium text-muted-foreground">Set</th>
-                            <th className="text-left py-2 px-3 font-medium text-muted-foreground">Weight (lbs)</th>
+                            {showHistoryWeight ? (
+                              <th className="text-left py-2 px-3 font-medium text-muted-foreground">Weight (lbs)</th>
+                            ) : null}
                             <th className="text-left py-2 px-3 font-medium text-muted-foreground">Reps</th>
                           </tr>
                         </thead>
@@ -2489,7 +2496,9 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
                           {entry.sets.map((set, j) => (
                             <tr key={j} className={j < entry.sets.length - 1 ? "border-b border-border/30" : ""}>
                               <td className="py-1.5 px-3">{set.set_number}</td>
-                              <td className="py-1.5 px-3">{set.weight}</td>
+                              {showHistoryWeight ? (
+                                <td className="py-1.5 px-3">{set.weight}</td>
+                              ) : null}
                               <td className="py-1.5 px-3">{set.reps}</td>
                             </tr>
                           ))}
