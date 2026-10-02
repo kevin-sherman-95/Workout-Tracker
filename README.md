@@ -68,7 +68,7 @@ Missing or wrong keys return `401`. Never commit a real key.
 
 **Reads:** optional `WORKOUT_API_USER_ID` (Kevin's Auth0 `sub`) scopes list/get to one user. If omitted, GET returns all stored workouts (this is a single-user app).
 
-**Writes:** always scoped to one owner. Prefer setting `WORKOUT_API_USER_ID`. If it is omitted and the database has exactly one user, writes use that account. If there are zero or multiple users, write endpoints return `503` until the env var is set. Payload `userId` is ignored. Another user's workout id returns `404`.
+**Writes:** always scoped to one owner. Prefer setting `WORKOUT_API_USER_ID`. If it is omitted, writes use the only row in `users`. If that table has zero or multiple rows, writes look at distinct `userId` values on existing workouts and use that owner only when exactly one user has workouts. If zero or more than one user has workouts, write endpoints return `503` and refuse to guess. Payload `userId` is ignored. PATCH/PUT/DELETE only touch workouts owned by the resolved user; another user's workout id returns `404`.
 
 ### Endpoints
 
@@ -144,9 +144,9 @@ Any subset of `date`, `focus`/`name`, `notes`, `bodyWeight`. If `exercises` is p
 
 - `400` validation (`{ "error": "..." }`)
 - `401` missing/invalid key
-- `404` unknown id or a workout owned by someone else
+- `404` unknown id, a non-UUID id, or a workout owned by someone else
 - `500` database failure
-- `503` database not configured, or writes cannot resolve a single owner user
+- `503` database not configured, or writes cannot resolve a single owner user (including when more than one user already has workouts)
 
 ### Vercel
 

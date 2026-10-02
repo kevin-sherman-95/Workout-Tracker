@@ -6,6 +6,7 @@ import type { WorkoutWithExercises } from "@/lib/types";
 import {
   getConfiguredWorkoutApiUserId,
   isAuthorizedWorkoutApiRequest,
+  isValidUuid,
   parseWorkoutListQuery,
 } from "@/lib/workout-api-helpers";
 import type {
@@ -119,6 +120,11 @@ type WorkoutQueryResult =
   | { error: NextResponse; workouts?: undefined }
   | { error?: undefined; workouts: WorkoutWithExercises[] };
 
+function isInvalidUuidError(error: { code?: string; message?: string }): boolean {
+  const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+  return text.includes("22p02") || text.includes("invalid input syntax for type uuid");
+}
+
 export async function queryWorkouts(
   filters: WorkoutQuery
 ): Promise<WorkoutQueryResult> {
@@ -152,6 +158,9 @@ export async function queryWorkouts(
     query = query.eq("user_id", scopedUserId);
   }
   if (filters.id) {
+    if (!isValidUuid(filters.id)) {
+      return { workouts: [] };
+    }
     query = query.eq("id", filters.id);
   }
   if (filters.from) {
@@ -164,6 +173,9 @@ export async function queryWorkouts(
   const { data, error } = await query;
 
   if (error) {
+    if (filters.id && isInvalidUuidError(error)) {
+      return { workouts: [] };
+    }
     console.error("Workout API query failed:", error);
     return {
       error: NextResponse.json(
@@ -215,6 +227,10 @@ async function fetchWorkoutRow(
   id: string,
   userId: string
 ): Promise<WorkoutWithExercises | null | { error: string }> {
+  if (!isValidUuid(id)) {
+    return null;
+  }
+
   const { data, error } = await supabase
     .from("workouts")
     .select(WORKOUT_API_SELECT)
@@ -231,6 +247,9 @@ async function fetchWorkoutRow(
     .maybeSingle();
 
   if (error) {
+    if (isInvalidUuidError(error)) {
+      return null;
+    }
     console.error("Workout API get failed:", error);
     return { error: error.message };
   }

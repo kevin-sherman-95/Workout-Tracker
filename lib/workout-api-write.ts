@@ -566,6 +566,13 @@ export function toEncodedSetRows(exercises: ValidatedExercise[]): EncodedSetRow[
   );
 }
 
+/**
+ * Resolve the single owner writes may target.
+ * 1) WORKOUT_API_USER_ID if set
+ * 2) the only row in users
+ * 3) the only distinct userId that already owns workouts
+ * Never guess when zero or more than one workout owner exists.
+ */
 export async function resolveWriteOwnerUserId(
   repo: WorkoutApiRepository
 ): Promise<{ userId: string } | ApiFailure> {

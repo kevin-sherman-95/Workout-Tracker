@@ -3,6 +3,7 @@ import {
   apiKeysMatch,
   extractProvidedApiKey,
   isValidIsoDate,
+  isValidUuid,
   parseWorkoutListQuery,
 } from "../lib/workout-api-helpers";
 
@@ -12,6 +13,13 @@ assert.strictEqual(isValidIsoDate("2024-02-29"), true);
 assert.strictEqual(isValidIsoDate("2026-13-01"), false);
 assert.strictEqual(isValidIsoDate("09-20-2026"), false);
 assert.strictEqual(isValidIsoDate(""), false);
+
+assert.strictEqual(isValidUuid("6e0d261c-86a2-4383-89f0-9162c1c10662"), true);
+assert.strictEqual(isValidUuid("6E0D261C-86A2-4383-89F0-9162C1C10662"), true);
+assert.strictEqual(isValidUuid("not-a-uuid"), false);
+assert.strictEqual(isValidUuid("w-1"), false);
+assert.strictEqual(isValidUuid(""), false);
+assert.strictEqual(isValidUuid("6e0d261c86a2438389f09162c1c10662"), false);
 
 const headerMap = (obj: Record<string, string>) => ({
   get(name: string) {
