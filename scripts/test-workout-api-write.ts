@@ -6,6 +6,7 @@ import {
   executeDeleteWorkout,
   executeGetWorkout,
   executeUpdateWorkout,
+  resolveWriteOwnerUserId,
   toEncodedSetRows,
 } from "../lib/workout-api-write";
 import type { WorkoutWithExercises } from "../lib/types";
@@ -392,38 +393,120 @@ async function main() {
   assert.strictEqual(repoIso.workouts[0].notes, undefined);
 
   const previous = process.env.WORKOUT_API_USER_ID;
-  delete process.env.WORKOUT_API_USER_ID;
-  const repoAmbiguous = createMemoryRepo({
-    users: ["auth0|kevin", "auth0|other"],
-    workouts: [
-      {
-        id: "w-k",
-        user_id: "auth0|kevin",
-        workout_date: "2026-09-01",
-        focus: "Legs",
-        created_at: "2026-09-01T00:00:00.000Z",
-        workout_exercises: [],
-      },
-      {
-        id: "w-o",
-        user_id: "auth0|other",
-        workout_date: "2026-09-02",
-        focus: "Legs",
-        created_at: "2026-09-02T00:00:00.000Z",
-        workout_exercises: [],
-      },
-    ],
-  });
-  await expectFail(
-    await executeCreateWorkout(
-      authHeaders,
-      { date: "2026-10-01", focus: "Other" },
-      repoAmbiguous
-    ),
-    503,
-    "WORKOUT_API_USER_ID"
+  const kevinWorkout = {
+    id: "w-k",
+    user_id: "auth0|kevin",
+    workout_date: "2026-09-01",
+    focus: "Legs",
+    created_at: "2026-09-01T00:00:00.000Z",
+    workout_exercises: [],
+  } as WorkoutWithExercises;
+  const otherWorkout = {
+    id: "w-o",
+    user_id: "auth0|other",
+    workout_date: "2026-09-02",
+    focus: "Legs",
+    created_at: "2026-09-02T00:00:00.000Z",
+    workout_exercises: [],
+  } as WorkoutWithExercises;
+
+  const configuredOwner = await resolveWriteOwnerUserId(
+    createMemoryRepo({
+      users: ["auth0|a", "auth0|b"],
+      workouts: [otherWorkout],
+    })
   );
-  process.env.WORKOUT_API_USER_ID = previous;
+  assert.ok(!("error" in configuredOwner));
+  assert.strictEqual(configuredOwner.userId, "auth0|kevin");
+
+  delete process.env.WORKOUT_API_USER_ID;
+
+  try {
+    const singleUserOwner = await resolveWriteOwnerUserId(
+      createMemoryRepo({ users: ["auth0|only"], workouts: [] })
+    );
+    assert.ok(!("error" in singleUserOwner));
+    assert.strictEqual(singleUserOwner.userId, "auth0|only");
+
+    const workoutOwner = await resolveWriteOwnerUserId(
+      createMemoryRepo({
+        users: ["auth0|kevin", "auth0|other"],
+        workouts: [kevinWorkout, { ...kevinWorkout, id: "w-k2" }],
+      })
+    );
+    assert.ok(!("error" in workoutOwner));
+    assert.strictEqual(workoutOwner.userId, "auth0|kevin");
+
+    const noWorkoutOwners = await resolveWriteOwnerUserId(
+      createMemoryRepo({ users: ["auth0|kevin", "auth0|other"], workouts: [] })
+    );
+    assert.strictEqual("error" in noWorkoutOwners, true);
+    if ("error" in noWorkoutOwners) {
+      assert.strictEqual(noWorkoutOwners.status, 503);
+    }
+
+    const repoAmbiguous = createMemoryRepo({
+      users: ["auth0|kevin", "auth0|other"],
+      workouts: [kevinWorkout, otherWorkout],
+    });
+    const ambiguousOwner = await resolveWriteOwnerUserId(repoAmbiguous);
+    assert.strictEqual("error" in ambiguousOwner, true);
+    await expectFail(
+      await executeCreateWorkout(
+        authHeaders,
+        { date: "2026-10-01", focus: "Other" },
+        repoAmbiguous
+      ),
+      503,
+      "WORKOUT_API_USER_ID"
+    );
+
+    const repoFallback = createMemoryRepo({
+      users: ["auth0|kevin", "auth0|other"],
+      workouts: [kevinWorkout],
+    });
+    const createdViaFallback = await executeCreateWorkout(
+      authHeaders,
+      { date: "2026-10-03", focus: "Other" },
+      repoFallback
+    );
+    assert.strictEqual(createdViaFallback.ok, true);
+    if (!createdViaFallback.ok) throw new Error("fallback create failed");
+    assert.strictEqual(createdViaFallback.data.user_id, "auth0|kevin");
+
+    const patchedOwn = await executeUpdateWorkout(
+      authHeaders,
+      "w-k",
+      { notes: "owned" },
+      repoFallback
+    );
+    assert.strictEqual(patchedOwn.ok, true);
+    if (!patchedOwn.ok) throw new Error("fallback patch failed");
+    assert.strictEqual(patchedOwn.data.notes, "owned");
+
+    await expectFail(await executeGetWorkout(authHeaders, "not-a-uuid", repoFallback), 404);
+    await expectFail(
+      await executeUpdateWorkout(authHeaders, "w-missing", { notes: "nope" }, repoFallback),
+      404
+    );
+    await expectFail(await executeDeleteWorkout(authHeaders, "w-missing", repoFallback), 404);
+    assert.strictEqual(repoFallback.workouts.some((workout) => workout.id === "w-k"), true);
+
+    const repoOwnedOnly = createMemoryRepo({
+      users: ["auth0|kevin", "auth0|other"],
+      workouts: [kevinWorkout, otherWorkout],
+    });
+    repoOwnedOnly.listWorkoutUserIds = async () => ["auth0|kevin"];
+    await expectFail(
+      await executeUpdateWorkout(authHeaders, "w-o", { notes: "stolen" }, repoOwnedOnly),
+      404
+    );
+    await expectFail(await executeDeleteWorkout(authHeaders, "w-o", repoOwnedOnly), 404);
+    assert.strictEqual(repoOwnedOnly.workouts.find((w) => w.id === "w-o")?.notes, undefined);
+    assert.strictEqual(repoOwnedOnly.workouts.some((w) => w.id === "w-o"), true);
+  } finally {
+    process.env.WORKOUT_API_USER_ID = previous;
+  }
 
   console.log("workout-api write checks passed");
 }

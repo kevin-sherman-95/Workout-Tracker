@@ -44,7 +44,8 @@ SUPABASE_SERVICE_ROLE_KEY='your-service-role-key'
 
 # Coach API (UI works without this; /api/workouts returns 401 if unset)
 WORKOUT_API_KEY='use [openssl rand -hex 32] to generate'
-# Required for writes if more than one user exists; also scopes GET results
+# Pins writes (and GET scoping) to one Auth0 user. Optional when users has
+# exactly one row, or when exactly one user already owns workouts.
 # WORKOUT_API_USER_ID='auth0|your-user-id'
 ```
 

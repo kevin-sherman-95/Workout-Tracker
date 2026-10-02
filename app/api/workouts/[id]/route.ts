@@ -9,6 +9,7 @@ import {
   serializedWorkoutResponse,
   workoutApiEnvelope,
 } from "@/lib/workout-api";
+import { isValidUuid } from "@/lib/workout-api-helpers";
 import {
   executeDeleteWorkout,
   executeUpdateWorkout,
@@ -27,6 +28,9 @@ export async function GET(
   const id = params.id?.trim();
   if (!id) {
     return NextResponse.json({ error: "Missing workout id." }, { status: 400 });
+  }
+  if (!isValidUuid(id)) {
+    return NextResponse.json({ error: "Workout not found." }, { status: 404 });
   }
 
   const result = await queryWorkouts({ id });

@@ -1,6 +1,13 @@
 import { timingSafeEqual } from "crypto";
 
 const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Postgres uuid text form. Non-matching ids must not be sent to the database. */
+export function isValidUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
 
 /** Calendar date in YYYY-MM-DD form that is a real Gregorian date. */
 export function isValidIsoDate(value: string): boolean {
