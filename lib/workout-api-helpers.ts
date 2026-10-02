@@ -56,3 +56,37 @@ export function isAuthorizedWorkoutApiRequest(headers: {
 }): boolean {
   return apiKeysMatch(extractProvidedApiKey(headers), getConfiguredWorkoutApiKey());
 }
+
+export type WorkoutListQuery =
+  | { from?: string; to?: string }
+  | { error: string };
+
+/** Inclusive from/to range, or a single `date` (same as from=to=date). */
+export function parseWorkoutListQuery(
+  from: string | null,
+  to: string | null,
+  date: string | null = null
+): WorkoutListQuery {
+  if (date) {
+    if (from || to) {
+      return { error: "Use date or from/to, not both." };
+    }
+    if (!isValidIsoDate(date)) {
+      return { error: "Invalid date. Use YYYY-MM-DD." };
+    }
+    return { from: date, to: date };
+  }
+  if (from && !isValidIsoDate(from)) {
+    return { error: "Invalid from date. Use YYYY-MM-DD." };
+  }
+  if (to && !isValidIsoDate(to)) {
+    return { error: "Invalid to date. Use YYYY-MM-DD." };
+  }
+  if (from && to && from > to) {
+    return { error: "from must be on or before to." };
+  }
+  return {
+    ...(from ? { from } : {}),
+    ...(to ? { to } : {}),
+  };
+}

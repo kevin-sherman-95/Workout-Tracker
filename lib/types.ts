@@ -37,11 +37,18 @@ export interface WorkoutWithExercises extends Workout {
   workout_exercises: (WorkoutExercise & { exercise: Exercise })[];
 }
 
-export type WorkoutFocus = 
-  | "Chest / Shoulders / Triceps"
-  | "Back / Biceps"
-  | "Legs"
-  | "Full Body"
-  | "Cardio"
-  | "Other";
+export const WORKOUT_FOCUS_VALUES = [
+  "Chest / Shoulders / Triceps",
+  "Back / Biceps",
+  "Legs",
+  "Full Body",
+  "Cardio",
+  "Other",
+] as const;
+
+export type WorkoutFocus = (typeof WORKOUT_FOCUS_VALUES)[number];
+
+export function isWorkoutFocus(value: string): value is WorkoutFocus {
+  return (WORKOUT_FOCUS_VALUES as readonly string[]).includes(value);
+}
 
