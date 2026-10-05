@@ -3,6 +3,7 @@ import { BODY_WEIGHT_UNIT } from "@/lib/body-weight";
 import { getSupabaseWithUser } from "@/lib/supabase/server";
 import { groupWorkoutExercisesInPerformOrder } from "@/lib/workout-exercise-order";
 import type { WorkoutWithExercises } from "@/lib/types";
+import { displayWorkoutFocus } from "@/lib/focus-labels";
 import {
   getConfiguredWorkoutApiUserId,
   isAuthorizedWorkoutApiRequest,
@@ -72,14 +73,15 @@ export function serializeWorkout(workout: WorkoutWithExercises) {
   const grouped = groupWorkoutExercisesInPerformOrder(
     workout.workout_exercises ?? []
   );
+  const focus = displayWorkoutFocus(workout.focus);
 
   return {
     id: workout.id,
     userId: workout.user_id,
     date: workout.workout_date,
     createdAt: workout.created_at,
-    name: workout.focus,
-    focus: workout.focus,
+    name: focus,
+    focus,
     notes: workout.notes ?? null,
     // Numeric `bodyWeight` kept for existing consumers; unit is always lb.
     bodyWeight: workout.body_weight ?? null,

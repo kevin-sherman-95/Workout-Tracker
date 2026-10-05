@@ -16,7 +16,12 @@ import {
   inferExerciseModality,
 } from "../lib/workout-set-decode";
 import { rowsToExerciseSets } from "../lib/workout-exercise-sets";
-import { focusShortName } from "../lib/focus-labels";
+import {
+  displayWorkoutFocus,
+  focusShortName,
+  resolveWorkoutFocus,
+} from "../lib/focus-labels";
+import { serializeWorkout } from "../lib/workout-api";
 
 assert.strictEqual(addDaysToIsoDate("2026-09-20", -7), "2026-09-13");
 assert.strictEqual(addDaysToIsoDate("2026-01-02", -3), "2025-12-30");
@@ -42,8 +47,8 @@ assert.strictEqual(summary.delta30d, -6);
 assert.strictEqual(summary.targetLb, BODY_WEIGHT_TARGET_LB);
 assert.strictEqual(summary.toTarget, 6);
 
-assert.strictEqual(inferExerciseModality("Bench Press", "Chest / Shoulders / Triceps"), "strength");
-assert.strictEqual(inferExerciseModality("Pull-ups", "Back / Biceps"), "bodyweight");
+assert.strictEqual(inferExerciseModality("Bench Press", "Push"), "strength");
+assert.strictEqual(inferExerciseModality("Pull-ups", "Pull"), "bodyweight");
 assert.strictEqual(inferExerciseModality("Running", "Cardio"), "cardio_distance");
 assert.strictEqual(inferExerciseModality("Peloton", "Cardio"), "cardio_output");
 assert.strictEqual(inferExerciseModality("Swimming", "Cardio"), "swim");
@@ -86,7 +91,7 @@ const cloned = rowsToExerciseSets(
       exercise: { name: "Bench Press" },
     },
   ],
-  "Chest / Shoulders / Triceps",
+  "Push",
   { emptyReps: true }
 );
 assert.strictEqual(cloned.length, 1);
@@ -96,8 +101,35 @@ assert.strictEqual(cloned[0].sets[0].reps, 0);
 assert.strictEqual(cloned[0].sets[1].weight, 195);
 assert.strictEqual(cloned[0].sets[1].reps, 0);
 
-assert.strictEqual(focusShortName("Chest / Shoulders / Triceps"), "Push");
-assert.strictEqual(focusShortName("Back / Biceps"), "Pull");
+assert.strictEqual(focusShortName("Push"), "Push");
+assert.strictEqual(focusShortName("Pull"), "Pull");
 assert.strictEqual(focusShortName("Cardio"), "Cardio");
+
+assert.strictEqual(resolveWorkoutFocus("Push"), "Push");
+assert.strictEqual(resolveWorkoutFocus("Pull"), "Pull");
+assert.strictEqual(resolveWorkoutFocus("Chest / Shoulders / Triceps"), "Push");
+assert.strictEqual(resolveWorkoutFocus("Chest/Triceps/Shoulders"), "Push");
+assert.strictEqual(resolveWorkoutFocus("Back / Biceps"), "Pull");
+assert.strictEqual(displayWorkoutFocus("Chest / Shoulders / Triceps"), "Push");
+assert.strictEqual(displayWorkoutFocus("Back / Biceps"), "Pull");
+assert.strictEqual(displayWorkoutFocus("Legs"), "Legs");
+
+const legacyWorkout = {
+  id: "w-1",
+  user_id: "u-1",
+  workout_date: "2026-10-01",
+  created_at: "2026-10-01T00:00:00Z",
+  workout_exercises: [],
+};
+const serializedLegacy = serializeWorkout({
+  ...legacyWorkout,
+  focus: "Chest / Shoulders / Triceps",
+});
+assert.strictEqual(serializedLegacy.focus, "Push");
+assert.strictEqual(serializedLegacy.name, "Push");
+assert.strictEqual(
+  serializeWorkout({ ...legacyWorkout, id: "w-2", focus: "Back / Biceps" }).focus,
+  "Pull"
+);
 
 console.log("quick-win helper checks passed");

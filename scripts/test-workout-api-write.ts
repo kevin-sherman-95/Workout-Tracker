@@ -287,7 +287,7 @@ async function main() {
   if (!created.ok) throw new Error("create failed");
   assert.strictEqual(created.status, 201);
   assert.strictEqual(created.data.user_id, "auth0|kevin");
-  assert.strictEqual(created.data.focus, "Chest / Shoulders / Triceps");
+  assert.strictEqual(created.data.focus, "Push");
   assert.strictEqual(created.data.body_weight, 186.5);
   assert.strictEqual(created.data.workout_exercises.length, 3);
   const benchSets = created.data.workout_exercises.filter(

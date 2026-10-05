@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, addMonths, subMonths, getDay } from "date-fns";
+import { displayWorkoutFocus } from "@/lib/focus-labels";
 
 interface WorkoutCalendarProps {
   workouts?: Array<{ workout_date: string; focus?: string; id?: string }> | null;
@@ -33,7 +34,7 @@ export function WorkoutCalendar({ workouts = [], isMockMode = false }: WorkoutCa
     
     setAllWorkouts(userWorkouts.map((w: any) => ({
       workout_date: w.workout_date,
-      focus: w.focus,
+      focus: w.focus ? displayWorkoutFocus(w.focus) : w.focus,
       id: w.id,
     })));
   }, []);
@@ -52,7 +53,12 @@ export function WorkoutCalendar({ workouts = [], isMockMode = false }: WorkoutCa
       loadWorkoutsFromLocalStorage();
       return;
     }
-    setAllWorkouts(workouts);
+    setAllWorkouts(
+      workouts.map((w) => ({
+        ...w,
+        focus: w.focus ? displayWorkoutFocus(w.focus) : w.focus,
+      }))
+    );
   }, [workouts, isMockMode, loadWorkoutsFromLocalStorage]);
 
   // Listen for workout updates to refresh the calendar
@@ -187,7 +193,7 @@ export function WorkoutCalendar({ workouts = [], isMockMode = false }: WorkoutCa
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-primary/10 border-primary/20 hover:bg-primary/20 active:bg-primary/30"
                   } cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2`}
-                  title={`${format(day, "MMM d")} - ${workout?.focus || 'Workout'} (Click to view)`}
+                  title={`${format(day, "MMM d")} - ${workout?.focus ? displayWorkoutFocus(workout.focus) : 'Workout'} (Click to view)`}
                 >
                   <span className={`text-xs font-medium ${isToday ? "text-primary-foreground" : ""}`}>
                     {format(day, "d")}
