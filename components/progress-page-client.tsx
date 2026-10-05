@@ -7,30 +7,17 @@ import { Select } from "@/components/ui/select";
 import { ExerciseProgressChart } from "@/components/exercise-progress-chart";
 import { format } from "date-fns";
 import type { WorkoutWithExercises, Exercise } from "@/lib/types";
+import { displayWorkoutFocus } from "@/lib/focus-labels";
 
 const ALL_FOCUSES = "__all__";
 
-const CANONICAL_FOCUSES = [
-  "Chest / Shoulders / Triceps",
-  "Back / Biceps",
-  "Legs",
-  "Full Body",
-  "Cardio",
-  "Other",
-];
-
 function normalizeFocusKey(focus: string | null | undefined): string {
   if (!focus) return "";
-  return focus.toLowerCase().replace(/\s*\/\s*/g, "/").trim();
+  return displayWorkoutFocus(focus).toLowerCase().replace(/\s*\/\s*/g, "/").trim();
 }
 
-const CANONICAL_FOCUS_BY_KEY = new Map(
-  CANONICAL_FOCUSES.map((f) => [normalizeFocusKey(f), f])
-);
-
 function canonicalizeFocusLabel(focus: string): string {
-  const key = normalizeFocusKey(focus);
-  return CANONICAL_FOCUS_BY_KEY.get(key) ?? focus;
+  return displayWorkoutFocus(focus);
 }
 
 const REP_COUNT_EXERCISES = new Set(["Pull-ups"]);

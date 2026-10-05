@@ -4,7 +4,7 @@ A Next.js workout tracking app built with Supabase for tracking gym workouts, ex
 
 ## Features
 
-- Log workouts by muscle group focus (Chest / Shoulders / Triceps, Back / Biceps, Legs, etc.)
+- Log workouts by muscle group focus (Push, Pull, Legs, etc.)
 - Track exercises with sets, reps, and weight
 - View workout history
 - Track progress week-over-week and month-over-month
@@ -96,7 +96,7 @@ Envelope fields:
 - Each exercise adds `modality` (`strength`, `bodyweight`, `duration`, `cardio_distance`, `cardio_output`, `swim`, `walk`).
 - Each set keeps raw `reps` / `weight` / `restIntervalSeconds` and adds decoded fields when inferable (`durationSec`, `distanceMi`, `outputKj`, `paceSecPerMi`, `inclinePct`, `intervalSec`, `distanceYd`, `swimSetCount`, `totalDistanceYd`).
 
-`focus` / `name` must be one of: `Chest / Shoulders / Triceps`, `Back / Biceps`, `Legs`, `Full Body`, `Cardio`, `Other`.
+`focus` / `name` must be one of: `Push`, `Pull`, `Legs`, `Full Body`, `Cardio`, `Other`. Legacy `Chest / Shoulders / Triceps` and `Back / Biceps` values are accepted and stored as `Push` / `Pull`.
 
 ### Create body (`POST`)
 
@@ -107,7 +107,7 @@ Optional: `notes`, `bodyWeight` (lb, or `null`), `exercises`.
 ```json
 {
   "date": "2026-10-01",
-  "focus": "Chest / Shoulders / Triceps",
+  "focus": "Push",
   "notes": "coach log",
   "bodyWeight": 186.5,
   "exercises": [
@@ -197,7 +197,7 @@ Create:
 curl -sS -X POST \
   -H "Authorization: Bearer $WORKOUT_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"date":"2026-10-01","focus":"Chest / Shoulders / Triceps","bodyWeight":186.5,"exercises":[{"name":"Bench Press","sets":[{"reps":8,"weight":185},{"reps":6,"weight":185}]}]}' \
+  -d '{"date":"2026-10-01","focus":"Push","bodyWeight":186.5,"exercises":[{"name":"Bench Press","sets":[{"reps":8,"weight":185},{"reps":6,"weight":185}]}]}' \
   "https://ksworkouts.vercel.app/api/workouts"
 ```
 

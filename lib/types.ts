@@ -38,8 +38,8 @@ export interface WorkoutWithExercises extends Workout {
 }
 
 export const WORKOUT_FOCUS_VALUES = [
-  "Chest / Shoulders / Triceps",
-  "Back / Biceps",
+  "Push",
+  "Pull",
   "Legs",
   "Full Body",
   "Cardio",

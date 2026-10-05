@@ -12,8 +12,18 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Trash2, Check, Save, ChevronDown, Clock, Trophy, X, ArrowRight, Info, Repeat } from "lucide-react";
-import type { Exercise, WorkoutExercise, WorkoutFocus } from "@/lib/types";
-import { focusShortName } from "@/lib/focus-labels";
+import {
+  WORKOUT_FOCUS_VALUES,
+  type Exercise,
+  type WorkoutExercise,
+  type WorkoutFocus,
+} from "@/lib/types";
+import {
+  focusShortName,
+  resolveWorkoutFocus,
+  storedFocusValues,
+  workoutFocusesMatch,
+} from "@/lib/focus-labels";
 import {
   rowsToExerciseSets,
   type WorkoutExerciseSourceRow,
@@ -202,7 +212,7 @@ async function fetchLastSameFocusWorkout(args: {
     const sorted = mockWorkouts
       .filter(
         (w) =>
-          w.focus === focusType &&
+          workoutFocusesMatch(w.focus, focusType) &&
           w.user_id === effectiveUserId &&
           w.id !== excludeWorkoutId
       )
@@ -240,7 +250,7 @@ async function fetchLastSameFocusWorkout(args: {
       "id, workout_date, focus, created_at, workout_exercises(id, workout_id, exercise_id, set_number, reps, weight, rest_interval, created_at, exercise:exercises(id, name, muscle_group_id))"
     )
     .eq("user_id", effectiveUserId)
-    .eq("focus", focusType)
+    .in("focus", storedFocusValues(focusType))
     .order("workout_date", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1);
@@ -270,7 +280,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   // Get user ID from Auth0 hook or prop
   const userId = propUserId || user?.sub || null;
   
-  const [focus, setFocus] = useState<WorkoutFocus>("Chest / Shoulders / Triceps");
+  const [focus, setFocus] = useState<WorkoutFocus>("Push");
   const [workoutDate, setWorkoutDate] = useState(
     initialDate || todayInPacific()
   );
@@ -409,14 +419,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
     selectedExercisesRef.current = selectedExercises;
   }, [selectedExercises]);
 
-  const focusOptions: WorkoutFocus[] = [
-    "Chest / Shoulders / Triceps",
-    "Back / Biceps",
-    "Legs",
-    "Full Body",
-    "Cardio",
-    "Other",
-  ];
+  const focusOptions: WorkoutFocus[] = [...WORKOUT_FOCUS_VALUES];
 
   const restIntervalOptions = [
     { value: "30", label: "30 seconds" },
@@ -601,8 +604,8 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   // Core muscle group is included in all workout types so "Core" exercise is always available
   const getMuscleGroupsForFocus = (focus: WorkoutFocus): string[] => {
     const mapping: Record<WorkoutFocus, string[]> = {
-      "Chest / Shoulders / Triceps": ["Chest", "Triceps", "Shoulders", "Core"],
-      "Back / Biceps": ["Back", "Biceps", "Core"],
+      Push: ["Chest", "Triceps", "Shoulders", "Core"],
+      Pull: ["Back", "Biceps", "Core"],
       "Legs": ["Legs", "Core"],
       "Full Body": ["Chest", "Triceps", "Shoulders", "Back", "Biceps", "Legs", "Core"],
       "Cardio": ["Cardio", "Core"],
@@ -614,7 +617,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
   // Mock exercises for testing when Supabase is not configured
   const getMockExercises = (focus: WorkoutFocus): Exercise[] => {
     const mapping: Record<WorkoutFocus, string[]> = {
-      "Chest / Shoulders / Triceps": [
+      Push: [
         "Barbell Bench Press",
         "Dumbbell Bench Press",
         "Barbell Incline Bench Press",
@@ -632,7 +635,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         "Rope Pull Downs",
         "Core",
       ],
-      "Back / Biceps": [
+      Pull: [
         "Deadlift",
         "Pull-ups",
         "Barbell Row",
@@ -875,7 +878,7 @@ export function WorkoutForm({ workoutId, initialDate, userId: propUserId }: Work
         }
 
         // Set workout fields
-        setFocus(workout.focus as WorkoutFocus);
+        setFocus(resolveWorkoutFocus(workout.focus) ?? (workout.focus as WorkoutFocus));
         setWorkoutDate(workout.workout_date);
         setNotes(workout.notes || "");
         setBodyWeight(workout.body_weight != null ? workout.body_weight.toString() : "");

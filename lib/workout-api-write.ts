@@ -6,8 +6,9 @@
  * GET payloads (raw + decoded fields) can be posted or patched back.
  */
 
-import { WORKOUT_FOCUS_VALUES, isWorkoutFocus } from "./types";
+import { WORKOUT_FOCUS_VALUES } from "./types";
 import type { Exercise, WorkoutWithExercises } from "./types";
+import { resolveWorkoutFocus } from "./focus-labels";
 import {
   getConfiguredWorkoutApiUserId,
   isAuthorizedWorkoutApiRequest,
@@ -232,12 +233,13 @@ function parseFocus(value: unknown, field: string): { value: string } | { error:
     return { error: `${field} is required.` };
   }
   const focus = value.trim();
-  if (!isWorkoutFocus(focus)) {
+  const resolved = resolveWorkoutFocus(focus);
+  if (!resolved) {
     return {
       error: `Invalid ${field} "${focus}". Use one of: ${FOCUS_LIST}.`,
     };
   }
-  return { value: focus };
+  return { value: resolved };
 }
 
 function parseBodyWeight(

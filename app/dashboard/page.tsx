@@ -9,6 +9,7 @@ import { DashboardStats } from "@/components/dashboard-stats";
 import { DashboardBodyWeight } from "@/components/dashboard-body-weight";
 import { DbStatusBanner } from "@/components/db-status-banner";
 import { getPacificPeriodBounds } from "@/lib/pacific-dates";
+import { displayWorkoutFocus } from "@/lib/focus-labels";
 
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
 const parseLocalDate = (dateString: string): Date => {
@@ -110,7 +111,7 @@ export default async function DashboardPage() {
                     className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
                   >
                     <div>
-                      <p className="font-medium">{workout.focus}</p>
+                      <p className="font-medium">{displayWorkoutFocus(workout.focus)}</p>
                       <p className="text-sm text-muted-foreground">
                         {format(parseLocalDate(workout.workout_date), "MMMM d, yyyy")}
                         {workout.body_weight != null &&

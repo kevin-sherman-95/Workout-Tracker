@@ -8,7 +8,13 @@ import { Select } from "@/components/ui/select";
 import { format } from "date-fns";
 import { createClient } from "@/lib/supabase/client";
 import { Pencil, Trash2, X, Filter, ChevronDown, ChevronUp, ArrowDownNarrowWide, ArrowUpNarrowWide } from "lucide-react";
-import type { WorkoutWithExercises, Exercise, WorkoutFocus } from "@/lib/types";
+import {
+  WORKOUT_FOCUS_VALUES,
+  type WorkoutWithExercises,
+  type Exercise,
+  type WorkoutFocus,
+} from "@/lib/types";
+import { displayWorkoutFocus, workoutFocusesMatch } from "@/lib/focus-labels";
 import {
   groupWorkoutExercisesInPerformOrder,
   sortWorkoutExerciseRows,
@@ -20,8 +26,9 @@ import {
 
 /** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
 function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
-  if (workout.focus !== "Cardio") {
-    return workout.focus;
+  const focusLabel = displayWorkoutFocus(workout.focus);
+  if (focusLabel !== "Cardio") {
+    return focusLabel;
   }
   const orderedUnique: string[] = [];
   const seen = new Set<string>();
@@ -33,11 +40,11 @@ function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
     orderedUnique.push(name);
   }
   if (orderedUnique.length === 0) {
-    return workout.focus;
+    return focusLabel;
   }
   const withoutCore = orderedUnique.filter((n) => n !== "Core");
   const labelParts = withoutCore.length > 0 ? withoutCore : orderedUnique;
-  return `${workout.focus} - ${labelParts.join(", ")}`;
+  return `${focusLabel} - ${labelParts.join(", ")}`;
 }
 
 // Parse date string (YYYY-MM-DD) as local date to avoid timezone issues
@@ -338,14 +345,7 @@ export function WorkoutHistoryClient({
   };
 
   // Get all available workout focuses (predefined types)
-  const allWorkoutFocuses: WorkoutFocus[] = [
-    "Chest / Shoulders / Triceps",
-    "Back / Biceps",
-    "Legs",
-    "Full Body",
-    "Cardio",
-    "Other"
-  ];
+  const allWorkoutFocuses: WorkoutFocus[] = [...WORKOUT_FOCUS_VALUES];
 
   // Filter by selected workout if provided, then by focus filter (only when browsing all)
   let displayedWorkouts = selectedWorkoutId
@@ -353,7 +353,9 @@ export function WorkoutHistoryClient({
     : workouts || [];
 
   if (!selectedWorkoutId && focusFilter !== "all") {
-    displayedWorkouts = displayedWorkouts.filter((w) => w.focus === focusFilter);
+    displayedWorkouts = displayedWorkouts.filter((w) =>
+      workoutFocusesMatch(w.focus, focusFilter)
+    );
   }
 
   if (!selectedWorkoutId && historyPeriod) {
@@ -393,7 +395,7 @@ export function WorkoutHistoryClient({
 
     const filteredWorkouts = focusFilter === "all" 
       ? workouts 
-      : workouts.filter((w) => w.focus === focusFilter);
+      : workouts.filter((w) => workoutFocusesMatch(w.focus, focusFilter));
     
     const thisMonthCount = filteredWorkouts.filter((w) => {
       const workoutDate = parseLocalDate(w.workout_date);

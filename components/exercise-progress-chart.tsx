@@ -25,7 +25,12 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { X } from "lucide-react";
 import { format, startOfMonth, startOfYear } from "date-fns";
-import type { WorkoutWithExercises, WorkoutFocus } from "@/lib/types";
+import {
+  WORKOUT_FOCUS_VALUES,
+  type WorkoutWithExercises,
+  type WorkoutFocus,
+} from "@/lib/types";
+import { displayWorkoutFocus, workoutFocusesMatch } from "@/lib/focus-labels";
 
 const REPS_KEY_PREFIX = "reps__";
 const WID_PREFIX = "wid__";
@@ -168,7 +173,7 @@ function ProgressDotWorkoutModal({
           <div>
             <h3 className="font-semibold text-lg">{selection.exerciseName}</h3>
             <p className="text-sm text-muted-foreground mt-1">{workoutDateLabel}</p>
-            <p className="text-sm text-muted-foreground">{workout.focus}</p>
+            <p className="text-sm text-muted-foreground">{displayWorkoutFocus(workout.focus)}</p>
           </div>
           <Button
             type="button"
@@ -369,14 +374,7 @@ interface ExerciseProgressChartProps {
   workouts: WorkoutWithExercises[];
 }
 
-const WORKOUT_FOCUS_OPTIONS: WorkoutFocus[] = [
-  "Chest / Shoulders / Triceps",
-  "Back / Biceps",
-  "Legs",
-  "Full Body",
-  "Cardio",
-  "Other",
-];
+const WORKOUT_FOCUS_OPTIONS: WorkoutFocus[] = [...WORKOUT_FOCUS_VALUES];
 
 /**
  * Virtual "exercise" name used to plot the user's manually-logged body weight
@@ -388,8 +386,8 @@ const BODY_WEIGHT_METRIC = "Body Weight";
 type WorkoutTypePreset = WorkoutFocus | typeof BODY_WEIGHT_METRIC | "";
 
 const FOCUS_TO_MUSCLE_GROUPS: Record<WorkoutFocus, readonly string[]> = {
-  "Chest / Shoulders / Triceps": ["Chest", "Shoulders", "Triceps"],
-  "Back / Biceps": ["Back", "Biceps"],
+  Push: ["Chest", "Shoulders", "Triceps"],
+  Pull: ["Back", "Biceps"],
   Legs: ["Legs"],
   "Full Body": [
     "Chest",
@@ -418,7 +416,7 @@ function exerciseNamesForWorkoutFocus(
   const allowedMuscleGroups = new Set(FOCUS_TO_MUSCLE_GROUPS[focus]);
   const namesLoggedUnderThisFocus = new Set<string>();
   for (const w of workoutList) {
-    if (w.focus !== focus) continue;
+    if (!workoutFocusesMatch(w.focus, focus)) continue;
     for (const we of w.workout_exercises) {
       if (we.exercise?.name) {
         namesLoggedUnderThisFocus.add(we.exercise.name.trim());
@@ -499,8 +497,7 @@ export function ExerciseProgressChart({ workouts }: ExerciseProgressChartProps) 
     if (!workoutTypePreset) return;
     // Always replace the selection with exactly the focus's exercises. This
     // ensures nothing from a prior focus (Core, Lateral Raises, etc.) ever
-    // stays selected when the user switches to e.g. Chest / Shoulders /
-    // Triceps.
+    // stays selected when the user switches to e.g. Push.
     setSelectedExercises(new Set(focusExerciseNames));
   }, [workoutTypePreset, focusExerciseNames]);
 
