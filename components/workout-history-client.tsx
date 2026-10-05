@@ -17,6 +17,7 @@ import {
   isWorkoutDateInHistoryPeriod,
   type WorkoutHistoryPeriod,
 } from "@/lib/workout-date-periods";
+import { shouldShowHistoryWeightColumn } from "@/lib/workout-set-decode";
 
 /** Cardio history title: "Cardio - Running" or "Cardio - Swimming, Peloton". Core is omitted when other exercises exist. */
 function getWorkoutHistoryCardTitle(workout: WorkoutWithExercises): string {
@@ -662,7 +663,11 @@ export function WorkoutHistoryClient({
               <CardContent className="space-y-4">
                 {exercisesInPerformOrder.map(({ exercise, sets }) => {
                   const isCoreExercise = exercise.name === "Core";
-                  const isPullups = exercise.name === "Pull-ups";
+                  const showHistoryWeight = shouldShowHistoryWeightColumn(
+                    exercise.name,
+                    sets,
+                    workout.focus
+                  );
                   // Check if this is a Peloton exercise to show output instead of distance
                   const isPeloton = exercise.name === "Peloton";
                   const isSwimming = exercise.name === "Swimming";
@@ -777,8 +782,7 @@ export function WorkoutHistoryClient({
                                   {timeDisplay} minutes
                                 </div>
                               );
-                            } else if (isPullups) {
-                              // Pull-ups only show reps (bodyweight exercise)
+                            } else if (!showHistoryWeight) {
                               return (
                                 <div
                                   key={set.set_number}

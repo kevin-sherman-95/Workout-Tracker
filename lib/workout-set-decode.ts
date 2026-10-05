@@ -69,6 +69,24 @@ export function inferExerciseModality(
   return "strength";
 }
 
+/**
+ * Whether a Set / Weight / Reps history table should include the Weight column.
+ *
+ * Hide the column only when the exercise is bodyweight (e.g. pull-ups) and every
+ * displayed set is stored as 0 lbs. If any set has added weight (weighted
+ * pull-ups), keep the column so logged data stays visible. Strength exercises
+ * always keep the column, even if every set happens to be 0.
+ */
+export function shouldShowHistoryWeightColumn(
+  exerciseName: string,
+  sets: Array<{ weight?: number | null }>,
+  workoutFocus = ""
+): boolean {
+  const hasLoggedWeight = sets.some((set) => Number(set.weight) > 0);
+  if (hasLoggedWeight) return true;
+  return inferExerciseModality(exerciseName, workoutFocus) !== "bodyweight";
+}
+
 function num(value: unknown): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
